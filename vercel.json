@@ -3,18 +3,18 @@
   "buildCommand": "npm run build",
   "outputDirectory": "web_dist",
   "functions": {
-    "api/index.py": {
+    "api.py": {
       "maxDuration": 60
     }
   },
   "rewrites": [
     {
       "source": "/v1/(.*)",
-      "destination": "/api/index.py"
+      "destination": "/api"
     },
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "destination": "/api"
     }
   ]
 }
