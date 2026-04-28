@@ -31,3 +31,5 @@ git_cache/
 config.example.json
 windows_setup.bat
 windows_run.bat
+.ace-tool/
+web/package-lock.json

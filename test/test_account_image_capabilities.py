@@ -119,6 +119,33 @@ class AuthServiceTests(unittest.TestCase):
             self.assertEqual(authed["id"], item["id"])
             self.assertIsNotNone(authed["last_used_at"])
 
+    def test_create_key_accepts_custom_raw_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            service = AuthService(JSONStorageBackend(Path(tmp_dir) / "accounts.json", Path(tmp_dir) / "auth_keys.json"))
+
+            item, raw_key = service.create_key(role="user", name="Alice", raw_key="custom-user-key")
+
+            self.assertEqual(raw_key, "custom-user-key")
+            authed = service.authenticate("custom-user-key")
+            self.assertIsNotNone(authed)
+            self.assertEqual(authed["id"], item["id"])
+
+    def test_create_key_rejects_duplicate_custom_raw_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            service = AuthService(JSONStorageBackend(Path(tmp_dir) / "accounts.json", Path(tmp_dir) / "auth_keys.json"))
+
+            service.create_key(role="user", name="Alice", raw_key="duplicate-key")
+
+            with self.assertRaisesRegex(ValueError, "key already exists"):
+                service.create_key(role="user", name="Bob", raw_key="duplicate-key")
+
+    def test_create_key_rejects_admin_auth_key_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            service = AuthService(JSONStorageBackend(Path(tmp_dir) / "accounts.json", Path(tmp_dir) / "auth_keys.json"))
+
+            with self.assertRaisesRegex(ValueError, "key conflicts with admin auth-key"):
+                service.create_key(role="user", name="Alice", raw_key="test-auth")
+
     def test_second_service_can_authenticate_key_created_by_first_service(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             storage = JSONStorageBackend(Path(tmp_dir) / "accounts.json", Path(tmp_dir) / "auth_keys.json")

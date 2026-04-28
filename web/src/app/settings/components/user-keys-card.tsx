@@ -41,6 +41,7 @@ export function UserKeysCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [name, setName] = useState("");
+  const [customKey, setCustomKey] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const [revealedKey, setRevealedKey] = useState("");
@@ -69,10 +70,11 @@ export function UserKeysCard() {
   const handleCreate = async () => {
     setIsCreating(true);
     try {
-      const data = await createUserKey(name.trim());
+      const data = await createUserKey(name.trim(), customKey.trim());
       setItems(data.items);
       setRevealedKey(data.key);
       setName("");
+      setCustomKey("");
       setIsDialogOpen(false);
       toast.success("用户密钥已创建");
     } catch (error) {
@@ -240,17 +242,29 @@ export function UserKeysCard() {
           <DialogHeader className="gap-2">
             <DialogTitle>创建用户密钥</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              可选填写一个备注名称，方便区分不同使用者；创建后会生成一条只能查看一次的原始密钥。
+              可选填写备注名称；原始密钥也可以自己定义。不填自定义密钥时，系统会随机生成一条只能查看一次的原始密钥。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-700">名称（可选）</label>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="例如：设计同学 A、运营临时账号"
-              className="h-11 rounded-xl border-stone-200 bg-white"
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-stone-700">名称（可选）</label>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="例如：设计同学 A、运营临时账号"
+                className="h-11 rounded-xl border-stone-200 bg-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-stone-700">自定义密钥（可选）</label>
+              <Input
+                value={customKey}
+                onChange={(event) => setCustomKey(event.target.value)}
+                placeholder="留空则自动随机生成"
+                className="h-11 rounded-xl border-stone-200 bg-white"
+              />
+              <p className="text-xs text-stone-500">不能与现有用户密钥重复，也不能和管理员部署密钥相同。</p>
+            </div>
           </div>
           <DialogFooter>
             <Button

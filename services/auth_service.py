@@ -97,6 +97,29 @@ class AuthService:
                 return index
         return None
 
+    def _has_key_hash_locked(self, candidate_hash: str) -> bool:
+        for item in self._items:
+            stored_hash = self._clean(item.get("key_hash"))
+            if stored_hash and hmac.compare_digest(stored_hash, candidate_hash):
+                return True
+        return False
+
+    def _build_unique_raw_key_locked(self, requested_key: str) -> str:
+        candidate = self._clean(requested_key)
+        if candidate:
+            if candidate == self._clean(config.auth_key):
+                raise ValueError("key conflicts with admin auth-key")
+            if self._has_key_hash_locked(_hash_key(candidate)):
+                raise ValueError("key already exists")
+            return candidate
+
+        while True:
+            generated_key = f"sk-{secrets.token_urlsafe(24)}"
+            if generated_key == self._clean(config.auth_key):
+                continue
+            if not self._has_key_hash_locked(_hash_key(generated_key)):
+                return generated_key
+
     @staticmethod
     def _public_item(item: dict[str, object]) -> dict[str, object]:
         return {
@@ -114,23 +137,23 @@ class AuthService:
             items = [item for item in self._items if role is None or item.get("role") == role]
             return [self._public_item(item) for item in items]
 
-    def create_key(self, *, role: AuthRole, name: str = "") -> tuple[dict[str, object], str]:
+    def create_key(self, *, role: AuthRole, name: str = "", raw_key: str = "") -> tuple[dict[str, object], str]:
         normalized_name = self._clean(name) or ("管理员密钥" if role == "admin" else "普通用户")
-        raw_key = f"sk-{secrets.token_urlsafe(24)}"
-        item = {
-            "id": uuid.uuid4().hex[:12],
-            "name": normalized_name,
-            "role": role,
-            "key_hash": _hash_key(raw_key),
-            "enabled": True,
-            "created_at": _now_iso(),
-            "last_used_at": None,
-        }
         with self._lock:
             self._refresh_locked(force=True)
+            resolved_raw_key = self._build_unique_raw_key_locked(raw_key)
+            item = {
+                "id": uuid.uuid4().hex[:12],
+                "name": normalized_name,
+                "role": role,
+                "key_hash": _hash_key(resolved_raw_key),
+                "enabled": True,
+                "created_at": _now_iso(),
+                "last_used_at": None,
+            }
             self._items.append(item)
             self._save()
-            return self._public_item(item), raw_key
+            return self._public_item(item), resolved_raw_key
 
     def update_key(
         self,
