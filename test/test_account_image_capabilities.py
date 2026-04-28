@@ -119,6 +119,23 @@ class AuthServiceTests(unittest.TestCase):
             self.assertEqual(authed["id"], item["id"])
             self.assertIsNotNone(authed["last_used_at"])
 
+    def test_second_service_can_authenticate_key_created_by_first_service(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage = JSONStorageBackend(Path(tmp_dir) / "accounts.json", Path(tmp_dir) / "auth_keys.json")
+            creator = AuthService(storage)
+            consumer = AuthService(storage)
+
+            item, raw_key = creator.create_key(role="user", name="Alice")
+
+            authed = consumer.authenticate(raw_key)
+
+            self.assertIsNotNone(authed)
+            self.assertEqual(authed["id"], item["id"])
+            items = consumer.list_keys(role="user")
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["id"], item["id"])
+            self.assertEqual(items[0]["name"], item["name"])
+
 
 if __name__ == "__main__":
     unittest.main()

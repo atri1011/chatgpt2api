@@ -62,6 +62,7 @@ environment:
 说明：
 - Cloudflare API Token 至少需要目标账号上的 `D1 Read` 与 `D1 Write` 权限。
 - 当前实现通过 Cloudflare 官方 D1 REST API 读写整份账号池 / 鉴权密钥快照，适合 Vercel 这类无状态部署。
+- 使用 `cloudflare_d1`、`postgres`、`git` 这类外部存储或多实例部署时，管理员刚创建的用户密钥需要由后端实例重新读取最新鉴权快照后才能登录，请确保部署的是包含最新鉴权刷新逻辑的版本。
 - 若你已经在 Vercel 上部署，推荐优先把 `STORAGE_BACKEND` 切到 `cloudflare_d1` 或 `postgres`，不要继续依赖临时文件系统。
 
 ### 方式二：Windows 本地部署

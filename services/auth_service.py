@@ -23,11 +23,15 @@ def _hash_key(value: str) -> str:
 
 
 class AuthService:
+    REFRESH_INTERVAL_SECONDS = 5.0
+
     def __init__(self, storage: StorageBackend):
         self.storage = storage
         self._lock = Lock()
-        self._items = self._load()
+        self._items: list[dict[str, object]] = []
         self._last_used_flush_at: dict[str, datetime] = {}
+        self._last_loaded_at = datetime.min.replace(tzinfo=timezone.utc)
+        self._refresh_locked(force=True)
 
     @staticmethod
     def _clean(value: object) -> str:
@@ -56,17 +60,42 @@ class AuthService:
             "last_used_at": last_used_at,
         }
 
-    def _load(self) -> list[dict[str, object]]:
+    def _load(self) -> list[dict[str, object]] | None:
         try:
             items = self.storage.load_auth_keys()
         except Exception:
-            return []
+            return None
         if not isinstance(items, list):
             return []
         return [normalized for item in items if (normalized := self._normalize_item(item)) is not None]
 
     def _save(self) -> None:
         self.storage.save_auth_keys(self._items)
+
+    def _refresh_locked(self, *, force: bool = False) -> None:
+        now = datetime.now(timezone.utc)
+        if not force and (now - self._last_loaded_at).total_seconds() < self.REFRESH_INTERVAL_SECONDS:
+            return
+        loaded_items = self._load()
+        if loaded_items is None:
+            return
+        self._items = loaded_items
+        self._last_loaded_at = now
+        valid_ids = {self._clean(item.get("id")) for item in self._items}
+        self._last_used_flush_at = {
+            item_id: last_flush_at
+            for item_id, last_flush_at in self._last_used_flush_at.items()
+            if item_id in valid_ids
+        }
+
+    def _match_item_index(self, candidate_hash: str) -> int | None:
+        for index, item in enumerate(self._items):
+            if not bool(item.get("enabled", True)):
+                continue
+            stored_hash = self._clean(item.get("key_hash"))
+            if stored_hash and hmac.compare_digest(stored_hash, candidate_hash):
+                return index
+        return None
 
     @staticmethod
     def _public_item(item: dict[str, object]) -> dict[str, object]:
@@ -81,6 +110,7 @@ class AuthService:
 
     def list_keys(self, role: AuthRole | None = None) -> list[dict[str, object]]:
         with self._lock:
+            self._refresh_locked(force=True)
             items = [item for item in self._items if role is None or item.get("role") == role]
             return [self._public_item(item) for item in items]
 
@@ -97,6 +127,7 @@ class AuthService:
             "last_used_at": None,
         }
         with self._lock:
+            self._refresh_locked(force=True)
             self._items.append(item)
             self._save()
             return self._public_item(item), raw_key
@@ -112,6 +143,7 @@ class AuthService:
         if not normalized_id:
             return None
         with self._lock:
+            self._refresh_locked(force=True)
             for index, item in enumerate(self._items):
                 if item.get("id") != normalized_id:
                     continue
@@ -132,6 +164,7 @@ class AuthService:
         if not normalized_id:
             return False
         with self._lock:
+            self._refresh_locked(force=True)
             before = len(self._items)
             self._items = [
                 item
@@ -149,25 +182,27 @@ class AuthService:
             return None
         candidate_hash = _hash_key(candidate)
         with self._lock:
-            for index, item in enumerate(self._items):
-                if not bool(item.get("enabled", True)):
-                    continue
-                stored_hash = self._clean(item.get("key_hash"))
-                if not stored_hash or not hmac.compare_digest(stored_hash, candidate_hash):
-                    continue
-                next_item = dict(item)
-                now = datetime.now(timezone.utc)
-                next_item["last_used_at"] = now.isoformat()
-                self._items[index] = next_item
-                item_id = self._clean(next_item.get("id"))
-                last_flush_at = self._last_used_flush_at.get(item_id)
-                if last_flush_at is None or (now - last_flush_at).total_seconds() >= 60:
-                    try:
-                        self._save()
-                        self._last_used_flush_at[item_id] = now
-                    except Exception:
-                        pass
-                return self._public_item(next_item)
+            self._refresh_locked()
+            index = self._match_item_index(candidate_hash)
+            if index is None:
+                self._refresh_locked(force=True)
+                index = self._match_item_index(candidate_hash)
+            if index is None:
+                return None
+            item = self._items[index]
+            next_item = dict(item)
+            now = datetime.now(timezone.utc)
+            next_item["last_used_at"] = now.isoformat()
+            self._items[index] = next_item
+            item_id = self._clean(next_item.get("id"))
+            last_flush_at = self._last_used_flush_at.get(item_id)
+            if last_flush_at is None or (now - last_flush_at).total_seconds() >= 60:
+                try:
+                    self._save()
+                    self._last_used_flush_at[item_id] = now
+                except Exception:
+                    pass
+            return self._public_item(next_item)
         return None
 
 
