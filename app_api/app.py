@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api import accounts, ai, register, system
-from api.support import resolve_web_asset, start_limited_account_watcher
+from app_api import accounts, ai, register, system
+from app_api.support import resolve_web_asset, start_limited_account_watcher
 from services.config import config
 
 

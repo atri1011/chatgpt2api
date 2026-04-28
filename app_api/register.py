@@ -7,7 +7,7 @@ from fastapi import APIRouter, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.support import require_admin
+from app_api.support import require_admin
 from services.register_service import register_service
 
 

@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-import api.support as api_support
+import app_api.support as api_support
 
 
 class ImageBaseUrlApiTests(unittest.TestCase):

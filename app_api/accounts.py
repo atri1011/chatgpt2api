@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from services.auth_service import auth_service
 
-from api.support import (
+from app_api.support import (
     require_admin,
     sanitize_cpa_pool,
     sanitize_cpa_pools,

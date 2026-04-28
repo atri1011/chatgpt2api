@@ -4,7 +4,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict
 
-from api.support import require_admin, require_identity, resolve_image_base_url
+from app_api.support import require_admin, require_identity, resolve_image_base_url
 from services.config import config
 from services.image_service import list_images
 from services.log_service import log_service

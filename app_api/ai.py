@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Request, Uploa
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.support import require_identity, resolve_image_base_url
+from app_api.support import require_identity, resolve_image_base_url
 from services.log_service import LoggedCall
 from services.protocol import (
     anthropic_v1_messages,
