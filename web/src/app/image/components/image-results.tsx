@@ -42,9 +42,9 @@ export function ImageResults({
   if (!selectedConversation) {
     return (
       <div className="flex h-full min-h-[420px] items-center justify-center text-center">
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-4xl px-3 sm:px-0">
           <h1
-            className="text-3xl font-semibold tracking-tight text-stone-950 md:text-5xl"
+            className="text-2xl font-semibold tracking-tight text-stone-950 sm:text-3xl md:text-5xl"
             style={{
               fontFamily: '"Palatino Linotype","Book Antiqua","URW Palladio L","Times New Roman",serif',
             }}
@@ -52,7 +52,7 @@ export function ImageResults({
             Turn ideas into images
           </h1>
           <p
-            className="mt-4 text-[15px] italic tracking-[0.01em] text-stone-500"
+            className="mt-4 text-sm italic tracking-[0.01em] text-stone-500 sm:text-[15px]"
             style={{
               fontFamily: '"Palatino Linotype","Book Antiqua","URW Palladio L","Times New Roman",serif',
             }}
@@ -65,7 +65,7 @@ export function ImageResults({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[980px] flex-col gap-8">
+    <div className="mx-auto flex w-full max-w-[980px] flex-col gap-6 sm:gap-8">
       {selectedConversation.turns.map((turn, turnIndex) => {
         const referenceLightboxImages = turn.referenceImages.map((image, index) => ({
           id: `${turn.id}-reference-${index}`,
@@ -87,7 +87,7 @@ export function ImageResults({
         return (
           <div key={turn.id} className="flex flex-col gap-4">
             <div className="flex justify-end">
-              <div className="max-w-[82%] px-1 py-1 text-[15px] leading-7 text-stone-900">
+              <div className="max-w-full px-1 py-1 text-sm leading-6 text-stone-900 sm:max-w-[82%] sm:text-[15px] sm:leading-7">
                 <div className="mb-2 flex flex-wrap justify-end gap-2 text-[11px] text-stone-400">
                   <span>第 {turnIndex + 1} 轮</span>
                   <span>
@@ -174,7 +174,7 @@ export function ImageResults({
                               }}
                             />
                           </button>
-                          <div className="flex items-center justify-between gap-2 px-3 py-3">
+                          <div className="flex flex-col items-start gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0 text-xs text-stone-500">
                               <span>结果 {index + 1}</span>
                               {imageMeta ? <span className="ml-2 text-stone-400">{imageMeta}</span> : null}

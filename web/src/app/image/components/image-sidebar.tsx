@@ -96,7 +96,7 @@ export function ImageSidebar({
                   <button
                     type="button"
                     onClick={() => void onDeleteConversation(conversation.id)}
-                    className="absolute top-3 right-2 inline-flex size-7 items-center justify-center rounded-md text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-rose-500 group-hover:opacity-100"
+                    className="absolute top-3 right-2 inline-flex size-8 items-center justify-center rounded-md text-stone-400 opacity-100 transition hover:bg-stone-100 hover:text-rose-500 md:size-7 md:opacity-0 md:group-hover:opacity-100"
                     aria-label="删除会话"
                   >
                     <Trash2 className="size-4" />

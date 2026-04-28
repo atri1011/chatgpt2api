@@ -92,7 +92,7 @@ export function ImageComposer({
   };
 
   return (
-    <div className="shrink-0 flex justify-center">
+    <div className="shrink-0 flex justify-center px-1 sm:px-0">
       <div style={{ width: "min(980px, 100%)" }}>
         {mode === "edit" && (
           <input
@@ -108,9 +108,9 @@ export function ImageComposer({
         )}
 
         {mode === "edit" && referenceImages.length > 0 ? (
-          <div className="mb-3 flex flex-wrap gap-2 px-1">
+          <div className="mb-3 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
             {referenceImages.map((image, index) => (
-              <div key={`${image.name}-${index}`} className="relative size-16">
+              <div key={`${image.name}-${index}`} className="relative size-16 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -142,7 +142,7 @@ export function ImageComposer({
           </div>
         ) : null}
 
-        <div className="rounded-[32px] border border-stone-200 bg-white">
+        <div className="rounded-[24px] border border-stone-200 bg-white sm:rounded-[32px]">
           <div
             className="relative cursor-text"
             onClick={() => {
@@ -170,11 +170,11 @@ export function ImageComposer({
                   void onSubmit();
                 }
               }}
-              className="min-h-[148px] resize-none rounded-[32px] border-0 bg-transparent px-6 pt-6 pb-20 text-[15px] leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0"
+              className="min-h-[132px] resize-none rounded-[24px] border-0 bg-transparent px-4 pt-4 pb-28 text-[15px] leading-6 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 sm:min-h-[148px] sm:rounded-[32px] sm:px-6 sm:pt-6 sm:pb-24 sm:leading-7"
             />
 
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-6 sm:px-6">
-              <div className="flex items-end justify-between gap-3">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-3 pb-3 pt-6 sm:px-6 sm:pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
                   {mode === "edit" && (
                     <Button
@@ -248,7 +248,7 @@ export function ImageComposer({
                     ) : null}
                   </div>
 
-                  <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-2">
                     <ModeButton active={mode === "generate"} onClick={() => onModeChange("generate")}>
                       文生图
                     </ModeButton>
@@ -262,10 +262,11 @@ export function ImageComposer({
                   type="button"
                   onClick={() => void onSubmit()}
                   disabled={!prompt.trim() || (mode === "edit" && referenceImages.length === 0)}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:size-11"
+                  className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-stone-950 px-4 text-sm font-medium text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:size-11 sm:w-auto sm:px-0 sm:text-base"
                   aria-label={mode === "edit" ? "编辑图片" : "生成图片"}
                 >
                   <ArrowUp className="size-3.5 sm:size-4" />
+                  <span className="sm:hidden">{mode === "edit" ? "开始编辑" : "开始生成"}</span>
                 </button>
               </div>
             </div>
@@ -290,7 +291,7 @@ function ModeButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full px-2.5 py-1.5 text-xs font-medium transition sm:px-4 sm:py-2 sm:text-sm",
+        "flex-1 rounded-full px-2.5 py-1.5 text-center text-xs font-medium transition sm:flex-none sm:px-4 sm:py-2 sm:text-sm",
         active ? "bg-stone-950 text-white" : "bg-stone-100 text-stone-600 hover:bg-stone-200",
       )}
     >
