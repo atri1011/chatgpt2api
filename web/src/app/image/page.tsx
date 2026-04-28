@@ -37,6 +37,7 @@ import {
 const ACTIVE_CONVERSATION_STORAGE_KEY = "chatgpt2api:image_active_conversation_id";
 const IMAGE_SIZE_STORAGE_KEY = "chatgpt2api:image_last_size";
 const activeConversationQueueIds = new Set<string>();
+type Heic2Any = (options: { blob: Blob; toType?: string; quality?: number }) => Promise<Blob | Blob[]>;
 
 function buildConversationTitle(prompt: string) {
   const trimmed = prompt.trim();
@@ -92,6 +93,19 @@ function isHeicLikeFile(file: File) {
   return fileType.includes("heic") || fileType.includes("heif") || /\.hei[cf]$/.test(fileName);
 }
 
+async function convertHeicFileToPng(file: File) {
+  const module = (await import("heic2any")) as { default: Heic2Any };
+  const converted = await module.default({
+    blob: file,
+    toType: "image/png",
+  });
+  const blob = Array.isArray(converted) ? converted[0] : converted;
+  if (!(blob instanceof Blob)) {
+    throw new Error("浏览器未返回可用的 HEIC 转换结果");
+  }
+  return new File([blob], ensurePngFileName(file.name), { type: "image/png" });
+}
+
 function loadImageElement(dataUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -102,13 +116,14 @@ function loadImageElement(dataUrl: string) {
 }
 
 async function normalizeReferenceImageFile(file: File): Promise<{ file: File; preview: StoredReferenceImage }> {
-  const originalDataUrl = await readFileAsDataUrl(file);
+  const sourceFile = isHeicLikeFile(file) ? await convertHeicFileToPng(file) : file;
+  const originalDataUrl = await readFileAsDataUrl(sourceFile);
   try {
     const image = await loadImageElement(originalDataUrl);
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
     if (!width || !height) {
-      throw new Error(`参考图尺寸无效: ${file.name}`);
+      throw new Error(`参考图尺寸无效: ${sourceFile.name}`);
     }
 
     const canvas = document.createElement("canvas");
@@ -121,7 +136,7 @@ async function normalizeReferenceImageFile(file: File): Promise<{ file: File; pr
 
     context.drawImage(image, 0, 0, width, height);
     const normalizedDataUrl = canvas.toDataURL("image/png");
-    const normalizedName = ensurePngFileName(file.name);
+    const normalizedName = ensurePngFileName(sourceFile.name);
     return {
       file: dataUrlToFile(normalizedDataUrl, normalizedName, "image/png"),
       preview: {
@@ -131,17 +146,10 @@ async function normalizeReferenceImageFile(file: File): Promise<{ file: File; pr
       },
     };
   } catch (error) {
-    if (!isHeicLikeFile(file)) {
-      throw error;
+    if (isHeicLikeFile(file)) {
+      throw new Error("HEIC/HEIF 参考图自动转换失败，请先手动转换成 PNG、JPG 或 WebP 后再上传");
     }
-    return {
-      file,
-      preview: {
-        name: file.name || "reference.heic",
-        type: file.type || "image/heic",
-        dataUrl: originalDataUrl,
-      },
-    };
+    throw error;
   }
 }
 

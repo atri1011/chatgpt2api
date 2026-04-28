@@ -30,6 +30,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "heic2any.d.ts",
     "next.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
