@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from threading import Event
@@ -18,6 +18,11 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        if not config.enable_background_watcher:
+            config.cleanup_old_images()
+            yield
+            return
+
         stop_event = Event()
         thread = start_limited_account_watcher(stop_event)
         config.cleanup_old_images()

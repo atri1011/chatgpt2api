@@ -1,4 +1,4 @@
-<h1 align="center">ChatGPT2API</h1>
+﻿<h1 align="center">ChatGPT2API</h1>
 
 
 <p align="center">ChatGPT2API 主要是对 ChatGPT 官网相关能力进行逆向整理与封装，提供面向 ChatGPT 图片生成、图片编辑、多图组图编辑场景的 OpenAI 兼容图片 API / 代理，并集成在线画图、号池管理、多种账号导入方式与 Docker 自托管部署能力。</p>
@@ -22,10 +22,12 @@
 
 ## 快速开始
 
+### 方式一：Docker / Linux / NAS
+
 已发布镜像支持 `linux/amd64` 与 `linux/arm64`，在 x86 服务器和 Apple Silicon / ARM Linux 设备上都会自动拉取匹配架构的版本。
 
 ```bash
-git clone git@github.com:basketikun/chatgpt2api.git
+git clone https://github.com/basketikun/chatgpt2api.git
 # 按需编辑 config.json 的密钥和 `refresh_account_interval_minute`
 # 也可以直接通过环境变量 CHATGPT2API_AUTH_KEY 覆盖 auth-key
 docker compose up -d
@@ -47,8 +49,75 @@ environment:
   - DATABASE_URL=postgresql://user:password@host:5432/dbname
 ```
 
-## 功能
+### 方式二：Windows 本地部署
 
+适用于 Windows 10/11 本机直接运行后端 API。
+
+前置条件：
+- 系统中有任意可用的 Python `3.11+`（仅用于安装 `uv`）
+- 建议已安装 Git
+- 首次安装依赖需要联网
+
+说明：`windows_setup.bat` 会优先使用 `uv` 自动解析 / 安装 Python `3.13` 来创建项目虚拟环境，避免部分依赖在 Python 3.11 下触发本地编译问题。
+
+步骤：
+
+```bat
+git clone https://github.com/basketikun/chatgpt2api.git
+cd chatgpt2api
+windows_setup.bat
+```
+
+然后完成以下任一配置：
+
+1. 编辑 `config.json` / `config.example.json` 中的 `auth-key`
+2. 或在当前终端设置环境变量：
+
+```bat
+set CHATGPT2API_AUTH_KEY=your_real_auth_key
+```
+
+启动服务：
+
+```bat
+windows_run.bat
+```
+
+默认监听：`http://127.0.0.1:8000`
+
+说明：
+- `windows_setup.bat` 会自动安装/检查 `uv`、优先使用 `uv` 管理的 Python 3.13、创建 `config.json`（若不存在）、并同步 Python 依赖。
+- 如果检测到 `C:\Program Files\nodejs\npm.cmd`，`windows_setup.bat` 还会自动构建 `web/` 前端，并把静态产物同步到 `web_dist/`，这样访问根路径 `/` 就不会再出现 `{"detail":"Not Found"}`。
+- 若你强制使用系统 Python 3.11，某些机器上可能因为 `cffi` 编译而要求安装 Microsoft Visual C++ Build Tools。
+- 若机器上没有 npm，仍可先使用后端 API；后续安装 Node.js/npm 后重新执行 `windows_setup.bat` 即可补齐 Web UI。
+
+### 方式三：Vercel 部署
+
+适用于将静态 Web UI 与 Python FastAPI API 一起部署到 Vercel。
+
+前置说明：
+- Vercel 上的 Python API 以 Serverless Function 方式运行，不适合长期常驻后台线程。
+- 项目已自动在 `VERCEL=1` 时关闭账号后台刷新线程，并把运行期数据目录切到临时目录。
+- 持久配置建议优先使用 Vercel 环境变量，而不是依赖仓库内 `config.json`。
+
+步骤：
+
+1. 导入本仓库到 Vercel。
+2. 在 Vercel Project Settings -> Environment Variables 中至少配置：
+   - `CHATGPT2API_AUTH_KEY`
+3. 如需自定义运行行为，可额外配置：
+   - `CHATGPT2API_CONFIG_FILE`：自定义配置文件路径
+   - `CHATGPT2API_DATA_DIR`：自定义运行期数据目录
+   - `CHATGPT2API_ENABLE_BACKGROUND_WATCHER=false`：显式关闭后台刷新线程
+4. 直接部署；Vercel 会执行根目录 `npm run build`，该命令会自动构建 `web/` 并把静态产物输出到 `web_dist/`。
+
+部署完成后：
+- 根路径 `/` 提供 Web UI
+- `/v1/*` 与 `/api/*` 会被转发到 Python FastAPI
+
+注意：
+- Vercel 文件系统是临时/只读为主的，账号池等运行期写入数据不适合作为长期持久存储。
+- 若你需要稳定的长期任务、定时刷新和本地文件持久化，仍建议优先使用 Docker / 自托管服务器部署。
 ### API 兼容能力
 
 - 兼容 `POST /v1/images/generations` 图片生成接口

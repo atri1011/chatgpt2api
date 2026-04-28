@@ -1,4 +1,4 @@
-# Python-generated files
+﻿# Python-generated files
 __pycache__/
 *.py[oc]
 build/
@@ -28,3 +28,6 @@ docker-compose-local.yml
 
 # Git cache
 git_cache/
+config.example.json
+windows_setup.bat
+windows_run.bat

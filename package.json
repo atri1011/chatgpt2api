@@ -1,0 +1,8 @@
+{
+  "name": "chatgpt2api-vercel-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/vercel-build.mjs"
+  }
+}

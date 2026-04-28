@@ -1,17 +1,20 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 import json
 import os
 import sys
-from pathlib import Path
 import time
+from pathlib import Path
+from tempfile import gettempdir
 
 from services.storage.base import StorageBackend
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "data"
-CONFIG_FILE = BASE_DIR / "config.json"
+IS_VERCEL = os.getenv("VERCEL") == "1"
+DEFAULT_DATA_DIR = Path(gettempdir()) / "chatgpt2api" if IS_VERCEL else BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("CHATGPT2API_DATA_DIR") or DEFAULT_DATA_DIR)
+CONFIG_FILE = Path(os.getenv("CHATGPT2API_CONFIG_FILE") or (BASE_DIR / "config.json"))
 VERSION_FILE = BASE_DIR / "VERSION"
 
 
@@ -19,6 +22,7 @@ VERSION_FILE = BASE_DIR / "VERSION"
 class LoadedSettings:
     auth_key: str
     refresh_account_interval_minute: int
+    enable_background_watcher: bool
 
 
 def _normalize_auth_key(value: object) -> str:
@@ -45,6 +49,13 @@ def _read_json_object(path: Path, *, name: str) -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _load_settings() -> LoadedSettings:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     raw_config = _read_json_object(CONFIG_FILE, name="config.json")
@@ -52,7 +63,13 @@ def _load_settings() -> LoadedSettings:
     if _is_invalid_auth_key(auth_key):
         raise ValueError(
             "❌ auth-key 未设置！\n"
-            "请在环境变量 CHATGPT2API_AUTH_KEY 中设置，或者在 config.json 中填写 auth-key。"
+            "请按以下任意一种方式解决：\n"
+            "1. 在系统环境变量或当前终端中设置：\n"
+            "   CHATGPT2API_AUTH_KEY = your_real_auth_key\n"
+            "2. 或者在项目根目录的 config.json / config.example.json 中填写：\n"
+            '   "auth-key": "your_real_auth_key"\n'
+            "3. Windows 本地部署可直接运行 windows_setup.bat 与 windows_run.bat\n"
+            "4. Vercel 部署请在项目环境变量中设置 CHATGPT2API_AUTH_KEY"
         )
 
     try:
@@ -63,6 +80,7 @@ def _load_settings() -> LoadedSettings:
     return LoadedSettings(
         auth_key=auth_key,
         refresh_account_interval_minute=refresh_interval,
+        enable_background_watcher=_env_flag("CHATGPT2API_ENABLE_BACKGROUND_WATCHER", default=not IS_VERCEL),
     )
 
 
@@ -102,6 +120,10 @@ class ConfigStore:
             return int(self.data.get("refresh_account_interval_minute", 5))
         except (TypeError, ValueError):
             return 5
+
+    @property
+    def enable_background_watcher(self) -> bool:
+        return _env_flag("CHATGPT2API_ENABLE_BACKGROUND_WATCHER", default=not IS_VERCEL)
 
     @property
     def image_retention_days(self) -> int:
@@ -189,7 +211,6 @@ class ConfigStore:
         return self.get()
 
     def get_storage_backend(self) -> StorageBackend:
-        """获取存储后端实例（单例）"""
         if self._storage_backend is None:
             from services.storage.factory import create_storage_backend
             self._storage_backend = create_storage_backend(DATA_DIR)
