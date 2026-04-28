@@ -170,10 +170,10 @@ export function ImageComposer({
                   void onSubmit();
                 }
               }}
-              className="min-h-[132px] resize-none rounded-[24px] border-0 bg-transparent px-4 pt-4 pb-28 text-[15px] leading-6 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 sm:min-h-[148px] sm:rounded-[32px] sm:px-6 sm:pt-6 sm:pb-24 sm:leading-7"
+              className="min-h-[132px] resize-none rounded-[24px] border-0 bg-transparent px-4 pt-4 pb-4 text-[15px] leading-6 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:ring-0 sm:min-h-[148px] sm:rounded-[32px] sm:px-6 sm:pt-6 sm:pb-24 sm:leading-7"
             />
 
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-3 pb-3 pt-6 sm:px-6 sm:pb-4">
+            <div className="border-t border-stone-100 px-3 pb-3 pt-3 sm:absolute sm:inset-x-0 sm:bottom-0 sm:border-t-0 sm:bg-gradient-to-t sm:from-white sm:via-white/95 sm:to-transparent sm:px-6 sm:pb-4 sm:pt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
                   {mode === "edit" && (
