@@ -86,6 +86,12 @@ function ensurePngFileName(fileName: string) {
   return `${next || "reference"}.png`;
 }
 
+function isHeicLikeFile(file: File) {
+  const fileType = file.type.toLowerCase();
+  const fileName = file.name.toLowerCase();
+  return fileType.includes("heic") || fileType.includes("heif") || /\.hei[cf]$/.test(fileName);
+}
+
 function loadImageElement(dataUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -97,32 +103,46 @@ function loadImageElement(dataUrl: string) {
 
 async function normalizeReferenceImageFile(file: File): Promise<{ file: File; preview: StoredReferenceImage }> {
   const originalDataUrl = await readFileAsDataUrl(file);
-  const image = await loadImageElement(originalDataUrl);
-  const width = image.naturalWidth || image.width;
-  const height = image.naturalHeight || image.height;
-  if (!width || !height) {
-    throw new Error(`参考图尺寸无效: ${file.name}`);
-  }
+  try {
+    const image = await loadImageElement(originalDataUrl);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) {
+      throw new Error(`参考图尺寸无效: ${file.name}`);
+    }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("浏览器无法处理参考图");
-  }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("浏览器无法处理参考图");
+    }
 
-  context.drawImage(image, 0, 0, width, height);
-  const normalizedDataUrl = canvas.toDataURL("image/png");
-  const normalizedName = ensurePngFileName(file.name);
-  return {
-    file: dataUrlToFile(normalizedDataUrl, normalizedName, "image/png"),
-    preview: {
-      name: normalizedName,
-      type: "image/png",
-      dataUrl: normalizedDataUrl,
-    },
-  };
+    context.drawImage(image, 0, 0, width, height);
+    const normalizedDataUrl = canvas.toDataURL("image/png");
+    const normalizedName = ensurePngFileName(file.name);
+    return {
+      file: dataUrlToFile(normalizedDataUrl, normalizedName, "image/png"),
+      preview: {
+        name: normalizedName,
+        type: "image/png",
+        dataUrl: normalizedDataUrl,
+      },
+    };
+  } catch (error) {
+    if (!isHeicLikeFile(file)) {
+      throw error;
+    }
+    return {
+      file,
+      preview: {
+        name: file.name || "reference.heic",
+        type: file.type || "image/heic",
+        dataUrl: originalDataUrl,
+      },
+    };
+  }
 }
 
 function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string) {

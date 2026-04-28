@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterator, Optional
 
 from curl_cffi import requests
 from PIL import Image, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from services.account_service import account_service
 from services.proxy_service import proxy_settings
@@ -16,6 +17,8 @@ from utils.helper import ensure_ok, iter_sse_payloads, new_uuid
 from utils.log import logger
 from utils.pow import build_legacy_requirements_token, build_proof_token, parse_pow_resources
 from utils.turnstile import solve_turnstile_token
+
+register_heif_opener()
 
 
 @dataclass
@@ -333,8 +336,8 @@ class OpenAIBackendAPI:
                 mime_type = Image.MIME.get(image_obj.format, "image/png")
         except UnidentifiedImageError as exc:
             raise ValueError(
-                f"unsupported reference image format: {file_name}. "
-                "Please upload PNG, JPG, or WebP. HEIC/HEIF images should be converted first."
+                f"unsupported or corrupted reference image: {file_name}. "
+                "Please upload a valid HEIC, HEIF, PNG, JPG, or WebP image."
             ) from exc
         path = "/backend-api/files"
         response = self.session.post(
