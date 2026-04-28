@@ -80,6 +80,51 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function ensurePngFileName(fileName: string) {
+  const normalized = fileName.trim() || "reference";
+  const next = normalized.replace(/\.[^./\\]+$/, "");
+  return `${next || "reference"}.png`;
+}
+
+function loadImageElement(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("浏览器无法解析这张参考图"));
+    image.src = dataUrl;
+  });
+}
+
+async function normalizeReferenceImageFile(file: File): Promise<{ file: File; preview: StoredReferenceImage }> {
+  const originalDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageElement(originalDataUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) {
+    throw new Error(`参考图尺寸无效: ${file.name}`);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("浏览器无法处理参考图");
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+  const normalizedDataUrl = canvas.toDataURL("image/png");
+  const normalizedName = ensurePngFileName(file.name);
+  return {
+    file: dataUrlToFile(normalizedDataUrl, normalizedName, "image/png"),
+    preview: {
+      name: normalizedName,
+      type: "image/png",
+      dataUrl: normalizedDataUrl,
+    },
+  };
+}
+
 function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string) {
   const [header, content] = dataUrl.split(",", 2);
   const matchedMimeType = header.match(/data:(.*?);base64/)?.[1];
@@ -447,16 +492,10 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     }
 
     try {
-      const previews = await Promise.all(
-        files.map(async (file) => ({
-          name: file.name,
-          type: file.type || "image/png",
-          dataUrl: await readFileAsDataUrl(file),
-        })),
-      );
+      const normalizedImages = await Promise.all(files.map((file) => normalizeReferenceImageFile(file)));
 
-      setReferenceImageFiles((prev) => [...prev, ...files]);
-      setReferenceImages((prev) => [...prev, ...previews]);
+      setReferenceImageFiles((prev) => [...prev, ...normalizedImages.map((item) => item.file)]);
+      setReferenceImages((prev) => [...prev, ...normalizedImages.map((item) => item.preview)]);
       setImageMode("edit");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";

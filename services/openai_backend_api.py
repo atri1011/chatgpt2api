@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
 from curl_cffi import requests
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from services.account_service import account_service
 from services.proxy_service import proxy_settings
@@ -327,9 +327,15 @@ class OpenAIBackendAPI:
             candidate_path = Path(os.path.expanduser(image))
             if candidate_path.exists() and candidate_path.is_file():
                 file_name = candidate_path.name
-        image = Image.open(BytesIO(data))
-        width, height = image.size
-        mime_type = Image.MIME.get(image.format, "image/png")
+        try:
+            with Image.open(BytesIO(data)) as image_obj:
+                width, height = image_obj.size
+                mime_type = Image.MIME.get(image_obj.format, "image/png")
+        except UnidentifiedImageError as exc:
+            raise ValueError(
+                f"unsupported reference image format: {file_name}. "
+                "Please upload PNG, JPG, or WebP. HEIC/HEIF images should be converted first."
+            ) from exc
         path = "/backend-api/files"
         response = self.session.post(
             self.base_url + path,
