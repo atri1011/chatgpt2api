@@ -866,7 +866,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <>
-      <section className="mx-auto grid h-[calc(100dvh-5rem)] min-h-0 w-full max-w-[1380px] grid-cols-1 gap-2 px-2 pb-3 sm:gap-3 sm:px-3 sm:pb-6 lg:h-[calc(100vh-5rem)] lg:grid-cols-[240px_minmax(0,1fr)]">
+      <section className="mx-auto grid h-[calc(100dvh-5rem)] min-h-0 w-full max-w-[1380px] grid-cols-1 gap-1.5 px-1.5 pb-2 sm:gap-3 sm:px-3 sm:pb-6 lg:h-[calc(100vh-5rem)] lg:grid-cols-[240px_minmax(0,1fr)]">
         <div className="hidden h-full min-h-0 border-r border-stone-200/70 pr-3 lg:block">
           <ImageSidebar
             conversations={conversations}
@@ -910,18 +910,18 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
           </DialogContent>
         </Dialog>
 
-        <div className="flex min-h-0 flex-col gap-3 sm:gap-4">
-          <div className="flex flex-wrap items-center gap-2 lg:hidden">
+        <div className="flex min-h-0 flex-col gap-2 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-1.5 lg:hidden">
             <Button
               variant="outline"
-              className="h-10 min-w-0 flex-1 rounded-2xl border-stone-200 bg-white/85 text-stone-700 shadow-sm"
+              className="h-9 min-w-0 flex-1 rounded-2xl border-stone-200 bg-white/85 text-stone-700 shadow-sm"
               onClick={() => setIsHistoryOpen(true)}
             >
               <History className="mr-2 size-4" />
               历史记录 ({conversations.length})
             </Button>
             <Button
-              className="h-10 rounded-2xl bg-stone-950 px-4 text-white shadow-sm"
+              className="h-9 rounded-2xl bg-stone-950 px-3.5 text-white shadow-sm"
               onClick={handleCreateDraft}
             >
               <Plus className="size-4" />
@@ -929,7 +929,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             </Button>
             <Button
               variant="outline"
-              className="h-10 rounded-2xl border-stone-200 bg-white/85 px-3 text-stone-600 shadow-sm"
+              className="h-9 rounded-2xl border-stone-200 bg-white/85 px-3 text-stone-600 shadow-sm"
               onClick={openClearHistoryConfirm}
               disabled={conversations.length === 0}
             >
@@ -939,7 +939,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
 
           <div
             ref={resultsViewportRef}
-            className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4"
+            className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-1 py-2 sm:px-4 sm:py-4"
           >
             <ImageResults
               selectedConversation={selectedConversation}
