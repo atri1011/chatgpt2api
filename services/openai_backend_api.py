@@ -9,7 +9,13 @@ from typing import Any, Dict, Iterator, Optional
 
 from curl_cffi import requests
 from PIL import Image, UnidentifiedImageError
-from pillow_heif import register_heif_opener
+try:
+    from pillow_heif import register_heif_opener as _register_heif_opener
+except Exception as exc:
+    _register_heif_opener = None
+    _heif_import_error = exc
+else:
+    _heif_import_error = None
 
 from services.account_service import account_service
 from services.proxy_service import proxy_settings
@@ -18,7 +24,13 @@ from utils.log import logger
 from utils.pow import build_legacy_requirements_token, build_proof_token, parse_pow_resources
 from utils.turnstile import solve_turnstile_token
 
-register_heif_opener()
+HEIF_SUPPORT_ENABLED = _register_heif_opener is not None
+if HEIF_SUPPORT_ENABLED:
+    _register_heif_opener()
+elif _heif_import_error is not None:
+    logger.warning(
+        f"pillow-heif is unavailable; HEIC/HEIF reference images are disabled: {_heif_import_error}"
+    )
 
 
 @dataclass
@@ -335,9 +347,15 @@ class OpenAIBackendAPI:
                 width, height = image_obj.size
                 mime_type = Image.MIME.get(image_obj.format, "image/png")
         except UnidentifiedImageError as exc:
+            supported_formats = "HEIC, HEIF, PNG, JPG, or WebP" if HEIF_SUPPORT_ENABLED else "PNG, JPG, or WebP"
+            extra_hint = (
+                ""
+                if HEIF_SUPPORT_ENABLED
+                else " HEIC/HEIF support is unavailable because optional dependency 'pillow-heif' is not installed."
+            )
             raise ValueError(
                 f"unsupported or corrupted reference image: {file_name}. "
-                "Please upload a valid HEIC, HEIF, PNG, JPG, or WebP image."
+                f"Please upload a valid {supported_formats} image.{extra_hint}"
             ) from exc
         path = "/backend-api/files"
         response = self.session.post(
