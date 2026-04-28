@@ -41,6 +41,7 @@ docker compose up -d
 - `sqlite` - 本地 SQLite 数据库
 - `postgres` - 外部 PostgreSQL（需配置 `DATABASE_URL`）
 - `git` - Git 私有仓库（需配置 `GIT_REPO_URL` 和 `GIT_TOKEN`）
+- `cloudflare_d1` - Cloudflare D1（需配置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_D1_DATABASE_ID`、`CLOUDFLARE_API_TOKEN`）
 
 示例：使用 PostgreSQL
 ```yaml
@@ -48,6 +49,20 @@ environment:
   - STORAGE_BACKEND=postgres
   - DATABASE_URL=postgresql://user:password@host:5432/dbname
 ```
+
+示例：使用 Cloudflare D1
+```yaml
+environment:
+  - STORAGE_BACKEND=cloudflare_d1
+  - CLOUDFLARE_ACCOUNT_ID=your_account_id
+  - CLOUDFLARE_D1_DATABASE_ID=your_database_uuid
+  - CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+```
+
+说明：
+- Cloudflare API Token 至少需要目标账号上的 `D1 Read` 与 `D1 Write` 权限。
+- 当前实现通过 Cloudflare 官方 D1 REST API 读写整份账号池 / 鉴权密钥快照，适合 Vercel 这类无状态部署。
+- 若你已经在 Vercel 上部署，推荐优先把 `STORAGE_BACKEND` 切到 `cloudflare_d1` 或 `postgres`，不要继续依赖临时文件系统。
 
 ### 方式二：Windows 本地部署
 
@@ -117,6 +132,7 @@ windows_run.bat
 
 注意：
 - Vercel 文件系统是临时/只读为主的，账号池等运行期写入数据不适合作为长期持久存储。
+- 若你希望继续使用 Vercel 部署但保留号池，推荐改用 `cloudflare_d1`、`postgres` 或 `git` 存储后端。
 - 若你需要稳定的长期任务、定时刷新和本地文件持久化，仍建议优先使用 Docker / 自托管服务器部署。
 ### API 兼容能力
 

@@ -13,7 +13,7 @@ services:
     environment:
       STORAGE_BACKEND: sqlite
       DATABASE_URL: sqlite:////app/data/accounts.db
-    # 存储后端配置 (可选值: json, sqlite, postgres, git)
+    # 存储后端配置 (可选值: json, sqlite, postgres, git, cloudflare_d1)
     # environment:
     #   STORAGE_BACKEND: json
 
@@ -26,6 +26,11 @@ services:
     #   GIT_TOKEN: ghp_xxxxxxxxxxxx
     #   GIT_BRANCH: main
     #   GIT_FILE_PATH: accounts.json
+
+    # Cloudflare D1 配置 (当 STORAGE_BACKEND=cloudflare_d1 时使用)
+    #   CLOUDFLARE_ACCOUNT_ID: your_account_id
+    #   CLOUDFLARE_D1_DATABASE_ID: your_database_uuid
+    #   CLOUDFLARE_API_TOKEN: your_cloudflare_api_token
 
     # 认证密钥 (可选，覆盖 config.json)
     #   CHATGPT2API_AUTH_KEY: your_secret_key
