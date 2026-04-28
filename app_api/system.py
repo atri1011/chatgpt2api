@@ -5,7 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict
 
 from app_api.support import require_admin, require_identity, resolve_image_base_url
-from services.config import config
+from services.config import CONFIG_FILE, DATA_DIR, IS_VERCEL, config
 from services.image_service import list_images
 from services.log_service import log_service
 from services.proxy_service import test_proxy
@@ -72,6 +72,11 @@ def create_router(app_version: str) -> APIRouter:
         return {
             "backend": storage.get_backend_info(),
             "health": storage.health_check(),
+            "runtime": {
+                "is_vercel": IS_VERCEL,
+                "data_dir": str(DATA_DIR),
+                "config_file": str(CONFIG_FILE),
+            },
         }
 
     return router

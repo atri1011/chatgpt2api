@@ -6,7 +6,7 @@ import hashlib
 import json
 from threading import Lock
 from typing import Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from curl_cffi.requests import Session
 
@@ -32,12 +32,15 @@ class AccountService:
         "business": "Team",
         "enterprise": "Team",
     }
+    REFRESH_INTERVAL_SECONDS = 5.0
 
     def __init__(self, storage_backend: StorageBackend):
         self.storage = storage_backend
         self._lock = Lock()
         self._index = 0
-        self._accounts = self._load_accounts()
+        self._accounts: list[dict] = []
+        self._last_loaded_at = datetime.min.replace(tzinfo=timezone.utc)
+        self._refresh_locked(force=True)
 
     @staticmethod
     def _clean_token(value: Any) -> str:
@@ -160,9 +163,28 @@ class AccountService:
             return quota, restore_at, False
         return quota, restore_at, True
 
-    def _load_accounts(self) -> list[dict]:
-        accounts = self.storage.load_accounts()
+    def _load_accounts(self) -> list[dict] | None:
+        try:
+            accounts = self.storage.load_accounts()
+        except Exception:
+            return None
+        if not isinstance(accounts, list):
+            return []
         return [normalized for item in accounts if (normalized := self._normalize_account(item)) is not None]
+
+    def _refresh_locked(self, *, force: bool = False) -> None:
+        now = datetime.now(timezone.utc)
+        if not force and (now - self._last_loaded_at).total_seconds() < self.REFRESH_INTERVAL_SECONDS:
+            return
+        loaded_accounts = self._load_accounts()
+        if loaded_accounts is None:
+            return
+        self._accounts = loaded_accounts
+        self._last_loaded_at = now
+        if self._accounts:
+            self._index %= len(self._accounts)
+        else:
+            self._index = 0
 
     def _save_accounts(self) -> None:
         self.storage.save_accounts(self._accounts)
@@ -264,6 +286,8 @@ class AccountService:
         return self.update_account(access_token, remote_info)
 
     def get_available_access_token(self) -> str:
+        with self._lock:
+            self._refresh_locked(force=True)
         attempted_tokens: set[str] = set()
         while True:
             access_token = self._pick_next_candidate_token(excluded_tokens=attempted_tokens)
@@ -280,6 +304,7 @@ class AccountService:
 
     def get_text_access_token(self) -> str:
         with self._lock:
+            self._refresh_locked(force=True)
             for account in self._accounts:
                 status = self._clean_token(account.get("status"))
                 if status not in {"禁用", "异常"}:
@@ -299,6 +324,7 @@ class AccountService:
 
     def has_available_account(self) -> bool:
         with self._lock:
+            self._refresh_locked(force=True)
             return any(self._is_image_account_available(item) for item in self._accounts)
 
     def get_account(self, access_token: str) -> dict | None:
@@ -306,6 +332,7 @@ class AccountService:
         if not access_token:
             return None
         with self._lock:
+            self._refresh_locked(force=True)
             index = self._find_account_index(access_token)
             if index >= 0:
                 return dict(self._accounts[index])
@@ -313,10 +340,12 @@ class AccountService:
 
     def list_accounts(self) -> list[dict]:
         with self._lock:
+            self._refresh_locked(force=True)
             return self._public_items(self._accounts)
 
     def list_limited_tokens(self) -> list[str]:
         with self._lock:
+            self._refresh_locked(force=True)
             return [
                 token
                 for item in self._accounts
@@ -330,6 +359,7 @@ class AccountService:
             return {"added": 0, "skipped": 0, "items": self.list_accounts()}
 
         with self._lock:
+            self._refresh_locked(force=True)
             indexed = {self._clean_token(item.get("access_token")): dict(item) for item in self._accounts}
             added = 0
             skipped = 0
@@ -360,6 +390,7 @@ class AccountService:
         if not target_set:
             return {"removed": 0, "items": self.list_accounts()}
         with self._lock:
+            self._refresh_locked(force=True)
             before = len(self._accounts)
             self._accounts = [item for item in self._accounts if
                               self._clean_token(item.get("access_token")) not in target_set]
@@ -382,6 +413,7 @@ class AccountService:
         if not access_token:
             return None
         with self._lock:
+            self._refresh_locked(force=True)
             index = self._find_account_index(access_token)
             if index < 0:
                 return None
@@ -404,6 +436,7 @@ class AccountService:
         if not access_token:
             return None
         with self._lock:
+            self._refresh_locked(force=True)
             index = self._find_account_index(access_token)
             if index < 0:
                 return None

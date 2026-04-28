@@ -66,6 +66,41 @@ class AccountCapabilityTests(unittest.TestCase):
             self.assertEqual(updated["status"], "正常")
             self.assertTrue(updated["image_quota_unknown"])
 
+    def test_second_service_lists_accounts_added_by_first_service(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage = JSONStorageBackend(Path(tmp_dir) / "accounts.json")
+            creator = AccountService(storage)
+            consumer = AccountService(storage)
+
+            creator.add_accounts(["token-1", "token-2"])
+
+            items = consumer.list_accounts()
+
+            self.assertEqual(len(items), 2)
+            self.assertEqual({item["access_token"] for item in items}, {"token-1", "token-2"})
+
+    def test_stale_service_update_does_not_drop_newer_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage = JSONStorageBackend(Path(tmp_dir) / "accounts.json")
+            seed = AccountService(storage)
+            seed.add_accounts(["token-old"])
+
+            stale_service = AccountService(storage)
+            fresh_service = AccountService(storage)
+
+            fresh_service.add_accounts(["token-old", "token-new-1", "token-new-2"])
+            updated = stale_service.update_account("token-old", {"status": "禁用"})
+
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated["status"], "禁用")
+
+            reloaded = AccountService(storage).list_accounts()
+            self.assertEqual(len(reloaded), 3)
+            self.assertEqual(
+                {item["access_token"] for item in reloaded},
+                {"token-old", "token-new-1", "token-new-2"},
+            )
+
 
 class TokenLogTests(unittest.TestCase):
     def test_anonymize_token_hides_raw_value(self) -> None:

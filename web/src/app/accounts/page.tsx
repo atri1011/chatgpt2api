@@ -43,7 +43,9 @@ import {
 import {
   deleteAccounts,
   fetchAccounts,
+  fetchStorageInfo,
   refreshAccounts,
+  type StorageInfoResponse,
   updateAccount,
   type Account,
   type AccountStatus,
@@ -218,10 +220,37 @@ function waitFor(ms: number) {
   });
 }
 
+function resolveStorageWarning(storageInfo: StorageInfoResponse | null) {
+  if (!storageInfo) {
+    return null;
+  }
+
+  if (storageInfo.health.status !== "healthy") {
+    return {
+      title: "当前存储后端状态异常",
+      detail: "后端存储健康检查没过，账号列表可能读写失败。先去“设置”或直接调用 /api/storage/info 看具体报错。",
+      tone: "danger" as const,
+    };
+  }
+
+  const backendType = String(storageInfo.backend.type || "").toLowerCase();
+  if (storageInfo.runtime.is_vercel && (backendType === "json" || backendType === "sqlite" || backendType === "database")) {
+    return {
+      title: `当前是 Vercel + ${storageInfo.backend.type} 存储`,
+      detail:
+        "这套组合天生容易丢号池状态。Vercel 是无状态运行环境，本地文件或本地 SQLite 刷新后可能回到旧快照。建议尽快切到 cloudflare_d1、postgres 或 git 存储。",
+      tone: "warning" as const,
+    };
+  }
+
+  return null;
+}
+
 function AccountsPageContent() {
   const didLoadRef = useRef(false);
   const accountsRef = useRef<Account[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [storageInfo, setStorageInfo] = useState<StorageInfoResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<AccountType | "all">("all");
@@ -240,6 +269,25 @@ function AccountsPageContent() {
   useEffect(() => {
     accountsRef.current = accounts;
   }, [accounts]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchStorageInfo()
+      .then((data) => {
+        if (active) {
+          setStorageInfo(data);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setStorageInfo(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const syncAccounts = (items: Account[], options?: { clearSnapshotWhenEmpty?: boolean }) => {
     const normalized = normalizeAccounts(items);
@@ -324,6 +372,8 @@ function AccountsPageContent() {
 
     return { total, active, limited, abnormal, disabled, quota };
   }, [accounts]);
+
+  const storageWarning = useMemo(() => resolveStorageWarning(storageInfo), [storageInfo]);
 
   const selectedTokens = useMemo(() => {
     const selectedSet = new Set(selectedIds);
@@ -479,6 +529,33 @@ function AccountsPageContent() {
           </Button>
         </div>
       </section>
+
+      {storageWarning ? (
+        <Card
+          className={cn(
+            "rounded-2xl border shadow-sm",
+            storageWarning.tone === "danger"
+              ? "border-rose-200 bg-rose-50/90"
+              : "border-amber-200 bg-amber-50/90",
+          )}
+        >
+          <CardContent className="flex gap-3 px-5 py-4">
+            <CircleAlert
+              className={cn(
+                "mt-0.5 size-4 shrink-0",
+                storageWarning.tone === "danger" ? "text-rose-500" : "text-amber-500",
+              )}
+            />
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-stone-900">{storageWarning.title}</div>
+              <p className="text-sm leading-6 text-stone-600">{storageWarning.detail}</p>
+              <p className="text-xs text-stone-500">
+                当前后端：{storageInfo?.backend.type ?? "unknown"}；数据目录：{storageInfo?.runtime.data_dir ?? "unknown"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => (!open ? setEditingAccount(null) : null)}>
         <DialogContent showCloseButton={false} className="rounded-2xl p-6">

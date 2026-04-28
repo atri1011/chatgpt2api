@@ -77,6 +77,26 @@ export type SystemLog = {
   [key: string]: unknown;
 };
 
+export type StorageInfoResponse = {
+  backend: {
+    type: string;
+    description?: string;
+    file_path?: string;
+    [key: string]: unknown;
+  };
+  health: {
+    status: string;
+    backend?: string;
+    error?: string;
+    [key: string]: unknown;
+  };
+  runtime: {
+    is_vercel: boolean;
+    data_dir: string;
+    config_file: string;
+  };
+};
+
 export type ImageResponse = {
   created: number;
   data: Array<{ b64_json: string; revised_prompt?: string }>;
@@ -258,6 +278,10 @@ export async function fetchSystemLogs(filters: { type?: string; start_date?: str
   if (filters.start_date) params.set("start_date", filters.start_date);
   if (filters.end_date) params.set("end_date", filters.end_date);
   return httpRequest<{ items: SystemLog[] }>(`/api/logs${params.toString() ? `?${params.toString()}` : ""}`);
+}
+
+export async function fetchStorageInfo() {
+  return httpRequest<StorageInfoResponse>("/api/storage/info");
 }
 
 export async function fetchUserKeys() {
