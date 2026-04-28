@@ -93,6 +93,9 @@ const metricCards = [
   { key: "quota", label: "剩余额度", color: "text-blue-500", icon: RefreshCw },
 ] as const;
 
+const ACCOUNT_SNAPSHOT_STORAGE_KEY = "chatgpt2api.accounts.snapshot";
+const EMPTY_ACCOUNTS_RETRY_DELAYS_MS = [300, 900] as const;
+
 function isUnlimitedImageQuotaAccount(account: Account) {
   return account.type === "Pro" || account.type === "ProLite";
 }
@@ -180,8 +183,44 @@ function normalizeAccounts(items: Account[]): Account[] {
   }));
 }
 
+function loadAccountSnapshot() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(ACCOUNT_SNAPSHOT_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? normalizeAccounts(parsed as Account[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAccountSnapshot(accounts: Account[], clearWhenEmpty = true) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (accounts.length === 0) {
+    if (clearWhenEmpty) {
+      window.localStorage.removeItem(ACCOUNT_SNAPSHOT_STORAGE_KEY);
+    }
+    return;
+  }
+  window.localStorage.setItem(ACCOUNT_SNAPSHOT_STORAGE_KEY, JSON.stringify(accounts));
+}
+
+function waitFor(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function AccountsPageContent() {
   const didLoadRef = useRef(false);
+  const accountsRef = useRef<Account[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -198,14 +237,40 @@ function AccountsPageContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
+
+  const syncAccounts = (items: Account[], options?: { clearSnapshotWhenEmpty?: boolean }) => {
+    const normalized = normalizeAccounts(items);
+    accountsRef.current = normalized;
+    setAccounts(normalized);
+    setSelectedIds((prev) => prev.filter((id) => normalized.some((item) => item.id === id)));
+    persistAccountSnapshot(normalized, options?.clearSnapshotWhenEmpty ?? true);
+  };
+
   const loadAccounts = async (silent = false) => {
     if (!silent) {
       setIsLoading(true);
     }
     try {
-      const data = await fetchAccounts();
-      setAccounts(normalizeAccounts(data.items));
-      setSelectedIds((prev) => prev.filter((id) => data.items.some((item) => item.id === id)));
+      let data = await fetchAccounts();
+      if (data.items.length === 0 && accountsRef.current.length > 0) {
+        for (const delayMs of EMPTY_ACCOUNTS_RETRY_DELAYS_MS) {
+          await waitFor(delayMs);
+          data = await fetchAccounts();
+          if (data.items.length > 0) {
+            break;
+          }
+        }
+      }
+
+      if (data.items.length === 0 && accountsRef.current.length > 0) {
+        toast.error("后端这次返回了空号池，当前先保留上次成功同步的列表。Vercel 建议改成持久化存储。");
+        return;
+      }
+
+      syncAccounts(data.items);
     } catch (error) {
       const message = error instanceof Error ? error.message : "加载账户失败";
       toast.error(message);
@@ -221,6 +286,13 @@ function AccountsPageContent() {
       return;
     }
     didLoadRef.current = true;
+    const snapshot = loadAccountSnapshot();
+    if (snapshot.length > 0) {
+      syncAccounts(snapshot, { clearSnapshotWhenEmpty: false });
+      setIsLoading(false);
+      void loadAccounts(true);
+      return;
+    }
     void loadAccounts();
   }, []);
 
@@ -285,8 +357,7 @@ function AccountsPageContent() {
     setIsDeleting(true);
     try {
       const data = await deleteAccounts(tokens);
-      setAccounts(normalizeAccounts(data.items));
-      setSelectedIds((prev) => prev.filter((id) => data.items.some((item) => item.id === id)));
+      syncAccounts(data.items);
       toast.success(`删除 ${data.removed ?? 0} 个账户`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "删除账户失败";
@@ -305,8 +376,7 @@ function AccountsPageContent() {
     setIsRefreshing(true);
     try {
       const data = await refreshAccounts(accessTokens);
-      setAccounts(normalizeAccounts(data.items));
-      setSelectedIds((prev) => prev.filter((id) => data.items.some((item) => item.id === id)));
+      syncAccounts(data.items);
       if (data.errors.length > 0) {
         const firstError = data.errors[0]?.error;
         toast.error(
@@ -342,8 +412,7 @@ function AccountsPageContent() {
         status: editStatus,
         quota: Number(editQuota || 0),
       });
-      setAccounts(normalizeAccounts(data.items));
-      setSelectedIds((prev) => prev.filter((id) => data.items.some((item) => item.id === id)));
+      syncAccounts(data.items);
       setEditingAccount(null);
       toast.success("账号信息已更新");
     } catch (error) {
@@ -394,7 +463,7 @@ function AccountsPageContent() {
           <AccountImportDialog
             disabled={isLoading || isRefreshing || isDeleting}
             onImported={(items) => {
-              setAccounts(normalizeAccounts(items));
+              syncAccounts(items);
               setSelectedIds([]);
               setPage(1);
             }}
