@@ -14,7 +14,7 @@ import tiktoken
 from services.account_service import account_service
 from services.config import config
 from services.openai_backend_api import OpenAIBackendAPI
-from utils.helper import IMAGE_MODELS
+from utils.helper import CHATGPT_WEB_IMAGE_MODELS, IMAGE_MODELS, is_probably_url
 from utils.log import logger
 
 
@@ -156,21 +156,28 @@ def format_image_result(
 ) -> dict[str, Any]:
     data: list[dict[str, Any]] = []
     for item in items:
+        url = str(item.get("url") or "").strip()
         b64_json = str(item.get("b64_json") or "").strip()
-        if not b64_json:
+        if not url and is_probably_url(b64_json):
+            url = b64_json
+        if not b64_json and not url:
             continue
         revised_prompt = str(item.get("revised_prompt") or prompt).strip() or prompt
+        payload: dict[str, Any] = {"revised_prompt": revised_prompt}
         if response_format == "b64_json":
-            data.append({
-                "b64_json": b64_json,
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
-                "revised_prompt": revised_prompt,
-            })
+            payload["b64_json"] = b64_json or url
+            if url:
+                payload["url"] = url
+            elif b64_json:
+                payload["url"] = save_image_bytes(base64.b64decode(b64_json), base_url)
         else:
-            data.append({
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
-                "revised_prompt": revised_prompt,
-            })
+            if url:
+                payload["url"] = url
+            elif b64_json:
+                payload["url"] = save_image_bytes(base64.b64decode(b64_json), base_url)
+            if b64_json:
+                payload["b64_json"] = b64_json
+        data.append(payload)
     result: dict[str, Any] = {"created": created or int(time.time()), "data": data}
     if message and not data:
         result["message"] = message
@@ -183,11 +190,13 @@ class ConversationRequest:
     prompt: str = ""
     messages: list[dict[str, Any]] | None = None
     images: list[str] | None = None
+    image_inputs: list[tuple[bytes, str, str]] | None = None
     n: int = 1
     size: str | None = None
     response_format: str = "b64_json"
     base_url: str | None = None
     message_as_error: bool = False
+    timeout_sec: int | None = None
 
 
 @dataclass
@@ -530,8 +539,24 @@ def stream_image_outputs(
 
 
 def stream_image_outputs_with_pool(request: ConversationRequest) -> Iterator[ImageOutput]:
-    if str(request.model or "").strip() not in IMAGE_MODELS:
-        raise ImageGenerationError("unsupported image model,supported models: " + ", ".join(IMAGE_MODELS))
+    if str(request.model or "").strip() not in CHATGPT_WEB_IMAGE_MODELS:
+        raise ImageGenerationError("unsupported image model,supported models: " + ", ".join(sorted(CHATGPT_WEB_IMAGE_MODELS)))
+
+    normalized_request = request
+    if request.images is None and request.image_inputs:
+        normalized_request = ConversationRequest(
+            model=request.model,
+            prompt=request.prompt,
+            messages=request.messages,
+            images=encode_images(request.image_inputs) or None,
+            image_inputs=request.image_inputs,
+            n=request.n,
+            size=request.size,
+            response_format=request.response_format,
+            base_url=request.base_url,
+            message_as_error=request.message_as_error,
+            timeout_sec=request.timeout_sec,
+        )
 
     emitted = False
     last_error = ""
@@ -549,7 +574,7 @@ def stream_image_outputs_with_pool(request: ConversationRequest) -> Iterator[Ima
             returned_result = False
             try:
                 backend = OpenAIBackendAPI(access_token=token)
-                for output in stream_image_outputs(backend, request, index, request.n):
+                for output in stream_image_outputs(backend, normalized_request, index, request.n):
                     if output.kind == "message" and request.message_as_error:
                         raise ImageGenerationError(
                             output.text or "Image generation was rejected by upstream policy.",

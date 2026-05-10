@@ -2,7 +2,7 @@ import { httpRequest } from "@/lib/request";
 
 export type AccountType = "Free" | "Plus" | "ProLite" | "Pro" | "Team";
 export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
-export type ImageModel = "gpt-image-2" | "codex-gpt-image-2";
+export type ImageModel = "gpt-image-2" | "codex-gpt-image-2" | "gpt-5-3" | "gpt-5-4-thinking";
 export type AuthRole = "admin" | "user";
 
 export type Account = {
@@ -99,7 +99,7 @@ export type StorageInfoResponse = {
 
 export type ImageResponse = {
   created: number;
-  data: Array<{ b64_json: string; revised_prompt?: string }>;
+  data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }>;
 };
 
 export type LoginResponse = {

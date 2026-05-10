@@ -37,3 +37,15 @@ services:
 
     # 基础 URL (可选)
     #   CHATGPT2API_BASE_URL: https://your-domain.com
+
+    # 图片 provider 配置
+    #   CHATGPT2API_IMAGE_PROVIDER: chatgpt_web
+    #   CHATGPT2API_IMAGE_API_BASE_URL: https://your-image-api.example.com
+    #   CHATGPT2API_IMAGE_API_KEY: sk-your-image-api-key
+    #   CHATGPT2API_IMAGE_TIMEOUT_SEC: 300
+    #   CHATGPT2API_IMAGE_DEFAULT_MODEL: gpt-image-2
+    #
+    # 说明:
+    # 1. 默认 `chatgpt_web` 继续走当前 ChatGPT Web 账号池生图链路
+    # 2. 切到 `linggan10s` 时，图生图会先把参考图写到 `/images/*`，再转成上游可回拉 URL
+    # 3. 若要在 `linggan10s` 下使用图生图，请确保 `CHATGPT2API_BASE_URL` 是公网可访问域名，不要填 localhost/127.0.0.1

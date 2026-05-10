@@ -2,14 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-from services.protocol.conversation import (
-    ConversationRequest,
-    ImageGenerationError,
-    collect_image_outputs,
-    encode_images,
-    stream_image_chunks,
-    stream_image_outputs_with_pool,
-)
+from services.image_provider import handle_image_request
+from services.protocol.conversation import ConversationRequest, ImageGenerationError
 
 
 def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
@@ -20,19 +14,15 @@ def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
     size = body.get("size")
     response_format = str(body.get("response_format") or "b64_json")
     base_url = str(body.get("base_url") or "") or None
-    encoded_images = encode_images(images)
-    if not encoded_images:
+    if not images:
         raise ImageGenerationError("image is required")
-    outputs = stream_image_outputs_with_pool(ConversationRequest(
+    return handle_image_request(ConversationRequest(
         prompt=prompt,
         model=model,
         n=n,
         size=size,
         response_format=response_format,
         base_url=base_url,
-        images=encoded_images,
+        image_inputs=images,
         message_as_error=True,
-    ))
-    if body.get("stream"):
-        return stream_image_chunks(outputs)
-    return collect_image_outputs(outputs)
+    ), stream=bool(body.get("stream")))

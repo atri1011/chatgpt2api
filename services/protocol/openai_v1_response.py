@@ -7,11 +7,10 @@ from typing import Any, Iterable, Iterator
 
 from fastapi import HTTPException
 
+from services.image_provider import stream_image_outputs
 from services.protocol.conversation import (
     ConversationRequest,
     ImageOutput,
-    encode_images,
-    stream_image_outputs_with_pool,
     stream_text_deltas,
     text_backend,
 )
@@ -85,13 +84,13 @@ def text_output_item(text: str, item_id: str | None = None, status: str = "compl
 def image_output_items(prompt: str, data: list[dict[str, Any]], item_id: str | None = None) -> list[dict[str, Any]]:
     output = []
     for item in data:
-        b64_json = str(item.get("b64_json") or "").strip()
-        if b64_json:
+        result = str(item.get("b64_json") or item.get("url") or "").strip()
+        if result:
             output.append({
                 "id": item_id or f"ig_{len(output) + 1}",
                 "type": "image_generation_call",
                 "status": "completed",
-                "result": b64_json,
+                "result": result,
                 "revised_prompt": str(item.get("revised_prompt") or prompt).strip() or prompt,
             })
     return output
@@ -196,15 +195,15 @@ def response_events(body: dict[str, Any]) -> Iterator[dict[str, Any]]:
     image_info = extract_response_image(body.get("input"))
     if image_info:
         image_data, mime_type = image_info
-        images = encode_images([(image_data, "image.png", mime_type)])
+        image_inputs = [(image_data, "image.png", mime_type)]
     else:
-        images = None
-    image_outputs = stream_image_outputs_with_pool(ConversationRequest(
+        image_inputs = None
+    image_outputs = stream_image_outputs(ConversationRequest(
         prompt=prompt,
         model=model,
-        size=None if images else "1:1",
+        size=None if image_inputs else "1:1",
         response_format="b64_json",
-        images=images,
+        image_inputs=image_inputs,
     ))
     yield from stream_image_response(image_outputs, prompt, model)
 

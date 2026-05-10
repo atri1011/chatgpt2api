@@ -6,7 +6,7 @@ import unittest
 
 import requests
 
-from test.utils import save_image
+from test.utils import save_image_result
 
 AUTH_KEY = "chatgpt2api"
 BASE_URL = "http://localhost:8000"
@@ -131,9 +131,9 @@ class ResponsesTests(unittest.TestCase):
         for index, item in enumerate(payload.get("output") or [], start=1):
             if not isinstance(item, dict):
                 continue
-            image_b64 = str(item.get("result") or "")
-            if image_b64:
-                saved_paths.append(save_image(image_b64, f"responses_image_non_stream_{index}"))
+            image_result = str(item.get("result") or "")
+            if image_result:
+                saved_paths.append(save_image_result(image_result, f"responses_image_non_stream_{index}"))
         print("responses image non-stream status:")
         print(response.status_code)
         print("responses image non-stream result:")
@@ -189,9 +189,9 @@ class ResponsesTests(unittest.TestCase):
             item = payload.get("item") or {}
             if str(item.get("type") or "") != "image_generation_call":
                 continue
-            image_b64 = str(item.get("result") or "")
-            if image_b64:
-                saved_paths.append(save_image(image_b64, f"responses_image_stream_{len(saved_paths) + 1}"))
+            image_result = str(item.get("result") or "")
+            if image_result:
+                saved_paths.append(save_image_result(image_result, f"responses_image_stream_{len(saved_paths) + 1}"))
         print("responses image stream saved files:")
         for path in saved_paths:
             print(path)
@@ -224,9 +224,9 @@ class ResponsesTests(unittest.TestCase):
         for index, item in enumerate(payload.get("output") or [], start=1):
             if not isinstance(item, dict):
                 continue
-            image_b64 = str(item.get("result") or "")
-            if image_b64:
-                saved_paths.append(save_image(image_b64, f"responses_codex_image_non_stream_{index}"))
+            image_result = str(item.get("result") or "")
+            if image_result:
+                saved_paths.append(save_image_result(image_result, f"responses_codex_image_non_stream_{index}"))
         print("responses codex image non-stream status:")
         print(response.status_code)
         print("responses codex image non-stream result:")
@@ -282,9 +282,9 @@ class ResponsesTests(unittest.TestCase):
             item = payload.get("item") or {}
             if str(item.get("type") or "") != "image_generation_call":
                 continue
-            image_b64 = str(item.get("result") or "")
-            if image_b64:
-                saved_paths.append(save_image(image_b64, f"responses_codex_image_stream_{len(saved_paths) + 1}"))
+            image_result = str(item.get("result") or "")
+            if image_result:
+                saved_paths.append(save_image_result(image_result, f"responses_codex_image_stream_{len(saved_paths) + 1}"))
         print("responses codex image stream saved files:")
         for path in saved_paths:
             print(path)

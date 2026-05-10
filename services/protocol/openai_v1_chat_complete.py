@@ -6,16 +6,14 @@ from typing import Any, Iterable, Iterator
 
 from fastapi import HTTPException
 
+from services.image_provider import handle_image_request, stream_image_outputs
 from services.protocol.conversation import (
     ConversationRequest,
     ImageOutput,
-    collect_image_outputs,
     collect_text,
     count_message_tokens,
     count_text_tokens,
-    encode_images,
     normalize_messages,
-    stream_image_outputs_with_pool,
     stream_text_deltas,
     text_backend,
 )
@@ -123,24 +121,24 @@ def image_result_content(result: dict[str, Any]) -> str:
 
 def image_chat_response(body: dict[str, Any]) -> dict[str, Any]:
     model, prompt, n, images = chat_image_args(body)
-    result = collect_image_outputs(stream_image_outputs_with_pool(ConversationRequest(
+    result = handle_image_request(ConversationRequest(
         prompt=prompt,
         model=model,
         n=n,
         response_format="b64_json",
-        images=encode_images(images) or None,
-    )))
+        image_inputs=images or None,
+    ))
     return completion_response(model, image_result_content(result), int(result.get("created") or 0) or None)
 
 
 def image_chat_events(body: dict[str, Any]) -> Iterator[dict[str, Any]]:
     model, prompt, n, images = chat_image_args(body)
-    image_outputs = stream_image_outputs_with_pool(ConversationRequest(
+    image_outputs = stream_image_outputs(ConversationRequest(
         prompt=prompt,
         model=model,
         n=n,
         response_format="b64_json",
-        images=encode_images(images) or None,
+        image_inputs=images or None,
     ))
     yield from stream_image_chat_completion(image_outputs, model)
 

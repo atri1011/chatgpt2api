@@ -29,6 +29,16 @@ export function ImageResults({
 }: ImageResultsProps) {
   const [imageDimensions, setImageDimensions] = useState<Record<string, string>>({});
 
+  const imageSrc = (image: StoredImage) => {
+    if (image.url) {
+      return image.url;
+    }
+    if (image.b64_json) {
+      return `data:image/png;base64,${image.b64_json}`;
+    }
+    return "";
+  };
+
   const updateImageDimensions = (id: string, width: number, height: number) => {
     const dimensions = formatImageDimensions(width, height);
     setImageDimensions((current) => {
@@ -72,12 +82,12 @@ export function ImageResults({
           src: image.dataUrl,
         }));
         const successfulTurnImages = turn.images.flatMap((image) =>
-          image.status === "success" && image.b64_json
+          image.status === "success" && imageSrc(image)
             ? [
                 {
                   id: image.id,
-                  src: `data:image/png;base64,${image.b64_json}`,
-                  sizeLabel: formatBase64ImageSize(image.b64_json),
+                  src: imageSrc(image),
+                  sizeLabel: image.b64_json ? formatBase64ImageSize(image.b64_json) : undefined,
                   dimensions: imageDimensions[image.id],
                 },
               ]
@@ -145,9 +155,10 @@ export function ImageResults({
 
                 <div className="columns-1 gap-4 space-y-4 sm:columns-2 xl:columns-3">
                   {turn.images.map((image, index) => {
-                    if (image.status === "success" && image.b64_json) {
+                    const src = imageSrc(image);
+                    if (image.status === "success" && src) {
                       const currentIndex = successfulTurnImages.findIndex((item) => item.id === image.id);
-                      const sizeLabel = formatBase64ImageSize(image.b64_json);
+                      const sizeLabel = image.b64_json ? formatBase64ImageSize(image.b64_json) : undefined;
                       const dimensions = imageDimensions[image.id];
                       const imageMeta = [sizeLabel, dimensions].filter(Boolean).join(" · ");
 
@@ -162,7 +173,7 @@ export function ImageResults({
                             className="group block w-full cursor-zoom-in"
                           >
                             <img
-                              src={`data:image/png;base64,${image.b64_json}`}
+                              src={src}
                               alt={`Generated result ${index + 1}`}
                               className="block h-auto w-full transition duration-200 group-hover:brightness-90"
                               onLoad={(event) => {

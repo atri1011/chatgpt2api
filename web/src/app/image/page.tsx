@@ -164,6 +164,43 @@ function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string) {
   return new File([bytes], fileName, { type: mimeType || matchedMimeType || "image/png" });
 }
 
+function fileNameExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() || "";
+}
+
+function extensionToMimeType(fileName: string) {
+  const extension = fileNameExtension(fileName);
+  if (extension === "jpg" || extension === "jpeg") {
+    return "image/jpeg";
+  }
+  if (extension === "webp") {
+    return "image/webp";
+  }
+  if (extension === "gif") {
+    return "image/gif";
+  }
+  return "image/png";
+}
+
+async function urlToReferenceImage(url: string, fileName: string): Promise<StoredReferenceImage> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("读取结果图片失败");
+  }
+  const blob = await response.blob();
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取结果图片失败"));
+    reader.readAsDataURL(blob);
+  });
+  return {
+    name: fileName,
+    type: blob.type || extensionToMimeType(fileName),
+    dataUrl,
+  };
+}
+
 function buildReferenceImageFromResult(image: StoredImage, fileName: string): StoredReferenceImage | null {
   if (!image.b64_json) {
     return null;
@@ -557,25 +594,34 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   }, []);
 
   const handleContinueEdit = useCallback(
-    (conversationId: string, image: StoredImage | StoredReferenceImage) => {
-      const nextReferenceImage =
-        "dataUrl" in image
-          ? image
-          : buildReferenceImageFromResult(image, `conversation-${conversationId}-${Date.now()}.png`);
-      if (!nextReferenceImage) {
-        return;
-      }
+    async (conversationId: string, image: StoredImage | StoredReferenceImage) => {
+      try {
+        let nextReferenceImage: StoredReferenceImage | null = null;
+        if ("dataUrl" in image) {
+          nextReferenceImage = image;
+        } else if (image.url) {
+          nextReferenceImage = await urlToReferenceImage(image.url, `conversation-${conversationId}-${Date.now()}.png`);
+        } else {
+          nextReferenceImage = buildReferenceImageFromResult(image, `conversation-${conversationId}-${Date.now()}.png`);
+        }
+        if (!nextReferenceImage) {
+          return;
+        }
 
-      setSelectedConversationId(conversationId);
-      setImageMode("edit");
-      setReferenceImages((prev) => [...prev, nextReferenceImage]);
-      setReferenceImageFiles((prev) => [
-        ...prev,
-        dataUrlToFile(nextReferenceImage.dataUrl, nextReferenceImage.name, nextReferenceImage.type),
-      ]);
-      setImagePrompt("");
-      textareaRef.current?.focus();
-      toast.success("已加入当前参考图，继续输入描述即可编辑");
+        setSelectedConversationId(conversationId);
+        setImageMode("edit");
+        setReferenceImages((prev) => [...prev, nextReferenceImage as StoredReferenceImage]);
+        setReferenceImageFiles((prev) => [
+          ...prev,
+          dataUrlToFile(nextReferenceImage.dataUrl, nextReferenceImage.name, nextReferenceImage.type),
+        ]);
+        setImagePrompt("");
+        textareaRef.current?.focus();
+        toast.success("已加入当前参考图，继续输入描述即可编辑");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "读取结果图片失败";
+        toast.error(message);
+      }
     },
     [],
   );
@@ -660,7 +706,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
                 ? await editImage(referenceFiles, queuedTurn.prompt, queuedTurn.model, queuedTurn.size)
                 : await generateImage(queuedTurn.prompt, queuedTurn.model, queuedTurn.size);
             const first = data.data?.[0];
-            if (!first?.b64_json) {
+            if (!first?.b64_json && !first?.url) {
               throw new Error("未返回图片数据");
             }
 
@@ -668,6 +714,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
               id: pendingImage.id,
               status: "success",
               b64_json: first.b64_json,
+              url: first.url,
             };
 
             await updateConversation(

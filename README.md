@@ -33,6 +33,37 @@ git clone https://github.com/basketikun/chatgpt2api.git
 docker compose up -d
 ```
 
+### 图片 Provider 配置
+
+默认情况下，所有图片入口都会走 `chatgpt_web`，也就是当前仓库原有的 ChatGPT Web 账号池生图链路。若你希望切换到外部 OpenAI 兼容图片服务，可通过环境变量启用 `linggan10s` provider。
+
+支持的环境变量：
+
+- `CHATGPT2API_IMAGE_PROVIDER`：可选值 `chatgpt_web` / `linggan10s`，默认 `chatgpt_web`
+- `CHATGPT2API_IMAGE_API_BASE_URL`：`linggan10s` provider 的上游 API Base URL
+- `CHATGPT2API_IMAGE_API_KEY`：`linggan10s` provider 的上游 API Key
+- `CHATGPT2API_IMAGE_TIMEOUT_SEC`：可选，图片请求超时时间，默认 `300`
+- `CHATGPT2API_IMAGE_DEFAULT_MODEL`：可选，未识别图片模型时的回退模型，默认 `gpt-image-2`
+
+说明：
+
+- 以上图片 provider 配置均为只读环境变量，不会写入后台设置页，也不会保存到 `config.json`
+- `chatgpt_web` provider 继续使用现有 ChatGPT Web 账号池 / Token 轮询逻辑
+- `linggan10s` provider 通过 `POST /v1/images/generations` 完成文生图与图生图；`/v1/images/edits` 会在服务端先把参考图落到 `/images/*`，再转换为上游可回拉的 URL
+- 若使用 `linggan10s` provider 的图生图，请务必配置可被上游访问的公网 `CHATGPT2API_BASE_URL`；如果 `base_url` 缺失，或仍是 `localhost` / `127.0.0.1` 这类本地地址，服务端会直接返回错误，而不是伪造成功
+
+示例：切换到 `linggan10s`
+
+```yaml
+environment:
+  - CHATGPT2API_IMAGE_PROVIDER=linggan10s
+  - CHATGPT2API_IMAGE_API_BASE_URL=https://your-image-api.example.com
+  - CHATGPT2API_IMAGE_API_KEY=sk-your-image-api-key
+  - CHATGPT2API_BASE_URL=https://your-public-domain.com
+  - CHATGPT2API_IMAGE_TIMEOUT_SEC=300
+  - CHATGPT2API_IMAGE_DEFAULT_MODEL=gpt-image-2
+```
+
 ### 存储后端配置
 
 支持通过环境变量 `STORAGE_BACKEND` 切换存储方式：
@@ -125,6 +156,11 @@ windows_run.bat
    - `CHATGPT2API_CONFIG_FILE`：自定义配置文件路径
    - `CHATGPT2API_DATA_DIR`：自定义运行期数据目录
    - `CHATGPT2API_ENABLE_BACKGROUND_WATCHER=false`：显式关闭后台刷新线程
+   - `CHATGPT2API_IMAGE_PROVIDER`：切换图片 provider，默认 `chatgpt_web`
+   - `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：当图片 provider 为 `linggan10s` 时必填
+   - `CHATGPT2API_IMAGE_TIMEOUT_SEC`：可选，图片请求超时时间
+   - `CHATGPT2API_IMAGE_DEFAULT_MODEL`：可选，未识别图片模型时的回退模型
+   - `CHATGPT2API_BASE_URL`：若你需要在 `linggan10s` provider 下使用图生图，建议显式配置公网可访问域名
 4. 直接部署；Vercel 会执行根目录 `npm run build`，该命令会自动构建 `web/` 并把静态产物输出到 `web_dist/`。
 
 部署完成后：
@@ -141,19 +177,20 @@ windows_run.bat
 - 兼容 `POST /v1/images/edits` 图片编辑接口
 - 兼容面向图片场景的 `POST /v1/chat/completions`
 - 兼容面向图片场景的 `POST /v1/responses`
-- `GET /v1/models` 返回 `gpt-image-2`、`codex-gpt-image-2`、`auto`、`gpt-5`、`gpt-5-1`、`gpt-5-2`、`gpt-5-3`、`gpt-5-3-mini`、
-  `gpt-5-mini`
+- 所有图片入口统一走同一套 provider 分发逻辑，不会出现 `/v1/images/*`、chat、responses 生图后端分裂
+- `GET /v1/models` 会始终返回文本模型；图片模型部分在默认 `chatgpt_web` provider 下返回 `gpt-image-2`、`codex-gpt-image-2`，切到 `linggan10s` provider 后会额外暴露 `gpt-5-3`、`gpt-5-4-thinking`
 - 支持通过 `n` 返回多张生成结果
 - 支持 Codex 中的画图接口逆向，仅 `Plus` / `Team` / `Pro` 订阅可用，模型别名为 `codex-gpt-image-2`，如有需要可自行在其他场景映射回 `gpt-image-2`，用于和官网画图区分；也就意味着同一账号会同时有官网和 Codex 两份生图额度
+- 图片结果兼容同时返回 `url` 与 `b64_json`；当上游约定 `b64_json` 实际承载 URL 时，服务端也会原样兼容透出
 
 ### 在线画图功能
 
 - 内置在线画图工作台，支持生成、图片编辑与多图组图编辑
-- 支持 `gpt-image-2`、`codex-gpt-image-2`、`auto`、`gpt-5`、`gpt-5-1`、`gpt-5-2`、`gpt-5-3`、`gpt-5-3-mini`、`gpt-5-mini` 模型选择
+- 默认支持 `gpt-image-2`、`codex-gpt-image-2` 图片模型；切换到 `linggan10s` provider 后，Web 端也兼容 `gpt-5-3`、`gpt-5-4-thinking`
 - 编辑模式支持参考图上传
 - 前端支持多图生成交互
 - 本地保存图片会话历史，支持回看、删除和清空
-- 支持服务端缓存图片URL
+- 支持服务端缓存图片 URL，且本地历史同时兼容 URL / base64 两种图片结果
 
 ### 号池管理功能
 

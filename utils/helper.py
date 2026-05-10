@@ -11,12 +11,18 @@ from curl_cffi import requests
 from fastapi import HTTPException
 from utils.log import logger
 
-IMAGE_MODELS = {"gpt-image-2", "codex-gpt-image-2"}
+CHATGPT_WEB_IMAGE_MODELS = {"gpt-image-2", "codex-gpt-image-2"}
+IMAGE_MODELS = CHATGPT_WEB_IMAGE_MODELS | {"gpt-5-3", "gpt-5-4-thinking"}
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def new_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def is_probably_url(value: object) -> bool:
+    text = str(value or "").strip().lower()
+    return text.startswith("http://") or text.startswith("https://")
 
 
 def is_image_chat_request(body: dict[str, object]) -> bool:
@@ -87,16 +93,32 @@ def iter_sse_payloads(response: requests.Response) -> Iterator[str]:
 
 def save_images_from_text(text: str, prefix: str) -> list[Path]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    matches = re.findall(r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+", text or "")
     saved_paths: list[Path] = []
     timestamp = int(time.time() * 1000)
-    for index, data_url in enumerate(matches, start=1):
+    for index, data_url in enumerate(re.findall(r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+", text or ""), start=1):
         header, encoded = data_url.split(",", 1)
         image_type = header.split(";")[0].removeprefix("data:image/").strip() or "png"
         extension = "jpg" if image_type == "jpeg" else image_type
         output_path = OUTPUT_DIR / f"{prefix}_{timestamp}_{index}.{extension}"
         output_path.write_bytes(base64.b64decode(encoded))
         saved_paths.append(output_path)
+    next_index = len(saved_paths) + 1
+    for url in re.findall(r"!\[[^\]]*]\((https?://[^)\s]+)\)", text or ""):
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+        except Exception:
+            continue
+        content_type = str(response.headers.get("content-type") or "image/png").split(";", 1)[0].strip().lower()
+        extension = {
+            "image/jpeg": "jpg",
+            "image/webp": "webp",
+            "image/gif": "gif",
+        }.get(content_type, "png")
+        output_path = OUTPUT_DIR / f"{prefix}_{timestamp}_{next_index}.{extension}"
+        output_path.write_bytes(response.content)
+        saved_paths.append(output_path)
+        next_index += 1
     return saved_paths
 
 
@@ -241,7 +263,13 @@ def build_chat_image_markdown_content(image_result: dict[str, object]) -> str:
     for index, item in enumerate(image_items, start=1):
         if not isinstance(item, dict):
             continue
+        url = str(item.get("url") or "").strip()
         b64_json = str(item.get("b64_json") or "").strip()
+        if not url and is_probably_url(b64_json):
+            url = b64_json
+        if url:
+            markdown_images.append(f"![image_{index}]({url})")
+            continue
         if b64_json:
             markdown_images.append(f"![image_{index}](data:image/png;base64,{b64_json})")
     return "\n\n".join(markdown_images) if markdown_images else "Image generation completed."

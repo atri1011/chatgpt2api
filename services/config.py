@@ -56,6 +56,10 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
+def _env_text(name: str) -> str:
+    return str(os.getenv(name) or "").strip()
+
+
 def _load_settings() -> LoadedSettings:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     raw_config = _read_json_object(CONFIG_FILE, name="config.json")
@@ -183,6 +187,31 @@ class ConfigStore:
         ).strip().rstrip("/")
 
     @property
+    def image_provider(self) -> str:
+        provider = _env_text("CHATGPT2API_IMAGE_PROVIDER").lower()
+        return provider if provider in {"chatgpt_web", "linggan10s"} else "chatgpt_web"
+
+    @property
+    def image_api_base_url(self) -> str:
+        return _env_text("CHATGPT2API_IMAGE_API_BASE_URL").rstrip("/")
+
+    @property
+    def image_api_key(self) -> str:
+        return _env_text("CHATGPT2API_IMAGE_API_KEY")
+
+    @property
+    def image_timeout_sec(self) -> int:
+        raw = _env_text("CHATGPT2API_IMAGE_TIMEOUT_SEC")
+        try:
+            return max(1, int(raw or "300"))
+        except (TypeError, ValueError):
+            return 300
+
+    @property
+    def image_default_model(self) -> str:
+        return _env_text("CHATGPT2API_IMAGE_DEFAULT_MODEL") or "gpt-image-2"
+
+    @property
     def app_version(self) -> str:
         try:
             value = VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -197,6 +226,11 @@ class ConfigStore:
         data["auto_remove_invalid_accounts"] = self.auto_remove_invalid_accounts
         data["auto_remove_rate_limited_accounts"] = self.auto_remove_rate_limited_accounts
         data["log_levels"] = self.log_levels
+        data["image_provider"] = self.image_provider
+        data["image_api_base_url"] = self.image_api_base_url
+        data["image_timeout_sec"] = self.image_timeout_sec
+        data["image_default_model"] = self.image_default_model
+        data["has_image_api_key"] = bool(self.image_api_key)
         data.pop("auth-key", None)
         return data
 
@@ -205,7 +239,15 @@ class ConfigStore:
 
     def update(self, data: dict[str, object]) -> dict[str, object]:
         next_data = dict(self.data)
-        next_data.update(dict(data or {}))
+        readonly_keys = {
+            "image_provider",
+            "image_api_base_url",
+            "image_api_key",
+            "image_timeout_sec",
+            "image_default_model",
+            "has_image_api_key",
+        }
+        next_data.update({key: value for key, value in dict(data or {}).items() if key not in readonly_keys})
         self.data = next_data
         self._save()
         return self.get()
