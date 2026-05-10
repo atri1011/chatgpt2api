@@ -771,15 +771,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
           }
         });
 
-        const settled = await Promise.allSettled(tasks);
-        const resumedSuccessCount = settled.filter(
-          (item): item is PromiseFulfilledResult<StoredImage> => item.status === "fulfilled",
-        ).length;
-        const resumedFailedCount = settled.length - resumedSuccessCount;
-        const existingSuccessCount = queuedTurn.images.filter((image) => image.status === "success").length;
-        const existingFailedCount = queuedTurn.images.filter((image) => image.status === "error").length;
-        const successCount = existingSuccessCount + resumedSuccessCount;
-        const failedCount = existingFailedCount + resumedFailedCount;
+        await Promise.allSettled(tasks);
 
         await updateConversation(conversationId, (current) => {
           const conversation = current ?? snapshot;
@@ -788,11 +780,22 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             updatedAt: new Date().toISOString(),
             turns: conversation.turns.map((turn) =>
               turn.id === queuedTurn.id
-                ? {
-                    ...turn,
-                    status: failedCount > 0 ? "error" : "success",
-                    error: failedCount > 0 ? `其中 ${failedCount} 张未成功生成` : undefined,
-                  }
+                ? (() => {
+                    const successCount = turn.images.filter((image) => image.status === "success").length;
+                    const failedCount = turn.images.filter((image) => image.status === "error").length;
+                    const nextStatus = successCount > 0 ? "success" : failedCount > 0 ? "error" : "generating";
+                    const nextError =
+                      failedCount > 0
+                        ? successCount > 0
+                          ? `其中 ${failedCount} 张未成功生成`
+                          : turn.images.find((image) => image.status === "error")?.error || `其中 ${failedCount} 张未成功生成`
+                        : undefined;
+                    return {
+                      ...turn,
+                      status: nextStatus,
+                      error: nextError,
+                    };
+                  })()
                 : turn,
             ),
           };
