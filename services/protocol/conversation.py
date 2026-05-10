@@ -158,6 +158,7 @@ def format_image_result(
     for item in items:
         url = str(item.get("url") or "").strip()
         b64_json = str(item.get("b64_json") or "").strip()
+        mime_type = str(item.get("mime_type") or "").strip().lower()
         if not url and is_probably_url(b64_json):
             url = b64_json
         if not b64_json and not url:
@@ -177,6 +178,8 @@ def format_image_result(
                 payload["url"] = save_image_bytes(base64.b64decode(b64_json), base_url)
             if b64_json:
                 payload["b64_json"] = b64_json
+        if mime_type:
+            payload["mime_type"] = mime_type
         data.append(payload)
     result: dict[str, Any] = {"created": created or int(time.time()), "data": data}
     if message and not data:

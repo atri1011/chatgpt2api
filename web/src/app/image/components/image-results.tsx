@@ -29,9 +29,12 @@ export function ImageResults({
 }: ImageResultsProps) {
   const [imageDimensions, setImageDimensions] = useState<Record<string, string>>({});
 
+  const hasInlineBase64 = (image: StoredImage) =>
+    Boolean(image.b64_json && !image.b64_json.startsWith("http://") && !image.b64_json.startsWith("https://"));
+
   const imageSrc = (image: StoredImage) => {
-    if (image.b64_json) {
-      return `data:image/png;base64,${image.b64_json}`;
+    if (hasInlineBase64(image)) {
+      return `data:${image.mime_type || "image/png"};base64,${image.b64_json}`;
     }
     if (image.url) {
       return image.url;
@@ -87,7 +90,7 @@ export function ImageResults({
                 {
                   id: image.id,
                   src: imageSrc(image),
-                  sizeLabel: image.b64_json ? formatBase64ImageSize(image.b64_json) : undefined,
+                  sizeLabel: hasInlineBase64(image) ? formatBase64ImageSize(image.b64_json!) : undefined,
                   dimensions: imageDimensions[image.id],
                 },
               ]
@@ -158,7 +161,7 @@ export function ImageResults({
                     const src = imageSrc(image);
                     if (image.status === "success" && src) {
                       const currentIndex = successfulTurnImages.findIndex((item) => item.id === image.id);
-                      const sizeLabel = image.b64_json ? formatBase64ImageSize(image.b64_json) : undefined;
+                      const sizeLabel = hasInlineBase64(image) ? formatBase64ImageSize(image.b64_json!) : undefined;
                       const dimensions = imageDimensions[image.id];
                       const imageMeta = [sizeLabel, dimensions].filter(Boolean).join(" · ");
 

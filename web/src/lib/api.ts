@@ -99,7 +99,7 @@ export type StorageInfoResponse = {
 
 export type ImageResponse = {
   created: number;
-  data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }>;
+  data: Array<{ b64_json?: string; url?: string; revised_prompt?: string; mime_type?: string }>;
 };
 
 export type LoginResponse = {

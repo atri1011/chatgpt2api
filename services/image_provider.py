@@ -340,6 +340,7 @@ def _normalize_linggan10s_result_item(item: dict[str, Any], request: Conversatio
     image_bytes, content_type = _download_upstream_image_bytes(source_url, request.timeout_sec or config.image_timeout_sec)
     local_url = save_image_bytes(image_bytes, request.base_url)
     normalized["url"] = local_url
+    normalized["mime_type"] = content_type.split(";", 1)[0].strip().lower() or "image/png"
     if request.response_format == "b64_json":
         normalized["b64_json"] = base64.b64encode(image_bytes).decode("ascii")
     elif raw_b64 and not raw_b64.startswith(("http://", "https://")):

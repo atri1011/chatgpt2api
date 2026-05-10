@@ -208,8 +208,8 @@ function buildReferenceImageFromResult(image: StoredImage, fileName: string): St
 
   return {
     name: fileName,
-    type: "image/png",
-    dataUrl: `data:image/png;base64,${image.b64_json}`,
+    type: image.mime_type || "image/png",
+    dataUrl: `data:${image.mime_type || "image/png"};base64,${image.b64_json}`,
   };
 }
 
@@ -715,6 +715,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
               status: "success",
               b64_json: first.b64_json,
               url: first.url,
+              mime_type: first.mime_type,
             };
 
             await updateConversation(
