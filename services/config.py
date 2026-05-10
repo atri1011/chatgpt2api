@@ -31,6 +31,7 @@ class ImageApiEndpoint:
     name: str
     base_url: str
     api_key: str
+    upstream_model: str = ""
 
 
 def _normalize_auth_key(value: object) -> str:
@@ -69,7 +70,7 @@ def _env_text(name: str) -> str:
 
 
 def _resolve_image_api_endpoints() -> tuple[list[ImageApiEndpoint], str | None]:
-    pattern = re.compile(r"^CHATGPT2API_IMAGE_API_(\d+)_(BASE_URL|KEY)$")
+    pattern = re.compile(r"^CHATGPT2API_IMAGE_API_(\d+)_(BASE_URL|KEY|MODEL)$")
     grouped: dict[int, dict[str, str]] = {}
     for name, raw_value in os.environ.items():
         match = pattern.match(str(name))
@@ -85,19 +86,31 @@ def _resolve_image_api_endpoints() -> tuple[list[ImageApiEndpoint], str | None]:
             label = f"CHATGPT2API_IMAGE_API_{index}"
             base_url = str(grouped[index].get("BASE_URL") or "").strip().rstrip("/")
             api_key = str(grouped[index].get("KEY") or "").strip()
+            upstream_model = str(grouped[index].get("MODEL") or "").strip()
             if not base_url and not api_key:
                 continue
             if not base_url:
                 return [], f"{label}_BASE_URL is required when {label}_KEY is set"
             if not api_key:
                 return [], f"{label}_KEY is required when {label}_BASE_URL is set"
-            endpoints.append(ImageApiEndpoint(name=label, base_url=base_url, api_key=api_key))
+            endpoints.append(ImageApiEndpoint(
+                name=label,
+                base_url=base_url,
+                api_key=api_key,
+                upstream_model=upstream_model,
+            ))
         return endpoints, None
 
     base_url = _env_text("CHATGPT2API_IMAGE_API_BASE_URL").rstrip("/")
     api_key = _env_text("CHATGPT2API_IMAGE_API_KEY")
+    upstream_model = _env_text("CHATGPT2API_IMAGE_API_MODEL")
     if base_url and api_key:
-        return [ImageApiEndpoint(name="CHATGPT2API_IMAGE_API", base_url=base_url, api_key=api_key)], None
+        return [ImageApiEndpoint(
+            name="CHATGPT2API_IMAGE_API",
+            base_url=base_url,
+            api_key=api_key,
+            upstream_model=upstream_model,
+        )], None
     if base_url:
         return [], "CHATGPT2API_IMAGE_API_KEY is required when CHATGPT2API_IMAGE_API_BASE_URL is set"
     if api_key:

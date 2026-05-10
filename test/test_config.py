@@ -71,8 +71,10 @@ class ConfigLoadingTests(unittest.TestCase):
         with mock.patch.dict(module.os.environ, {
             "CHATGPT2API_IMAGE_API_2_BASE_URL": "https://node2.example.com/",
             "CHATGPT2API_IMAGE_API_2_KEY": "sk-node-2",
+            "CHATGPT2API_IMAGE_API_2_MODEL": "vendor-model-2",
             "CHATGPT2API_IMAGE_API_1_BASE_URL": "https://node1.example.com",
             "CHATGPT2API_IMAGE_API_1_KEY": "sk-node-1",
+            "CHATGPT2API_IMAGE_API_1_MODEL": "vendor-model-1",
         }, clear=False):
             endpoints, error = module._resolve_image_api_endpoints()
         self.assertEqual(error, None)
@@ -82,6 +84,8 @@ class ConfigLoadingTests(unittest.TestCase):
         ])
         self.assertEqual(endpoints[0].base_url, "https://node1.example.com")
         self.assertEqual(endpoints[1].api_key, "sk-node-2")
+        self.assertEqual(endpoints[0].upstream_model, "vendor-model-1")
+        self.assertEqual(endpoints[1].upstream_model, "vendor-model-2")
 
     def test_numbered_image_api_endpoints_require_matching_key(self) -> None:
         module = self.config_module

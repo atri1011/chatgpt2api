@@ -119,6 +119,7 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(outputs[0].data[0]["url"], "https://public.example.com/images/result.png")
         self.assertNotEqual(outputs[0].data[0]["b64_json"], "https://cdn.example.com/image.png")
         self.assertTrue(outputs[0].data[0]["b64_json"])
+        self.assertEqual(fake_session.post.call_args.kwargs["json"]["model"], "gpt-image-0")
 
     def test_linggan10s_fallbacks_to_next_endpoint_on_retryable_error(self) -> None:
         fake_config = SimpleNamespace(
@@ -162,6 +163,46 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(len(outputs), 1)
         self.assertEqual(fake_session.post.call_count, 2)
         self.assertEqual(outputs[0].data[0]["url"], "https://public.example.com/images/result.png")
+
+    def test_linggan10s_endpoint_can_override_upstream_model(self) -> None:
+        fake_config = SimpleNamespace(
+            image_provider="linggan10s",
+            image_timeout_sec=120,
+            image_api_base_url="https://example.test",
+            image_api_key="sk-test",
+            image_api_endpoints=[
+                ImageApiEndpoint(
+                    name="CHATGPT2API_IMAGE_API_1",
+                    base_url="https://example.test",
+                    api_key="sk-test",
+                    upstream_model="gpt-image-2",
+                ),
+            ],
+            image_api_configuration_error="",
+            image_default_model="gpt-image-2",
+            base_url="https://public.example.com",
+        )
+        fake_response = SimpleNamespace(
+            status_code=200,
+            text='{"ok":true}',
+            json=lambda: {
+                "created": 123,
+                "data": [{"url": "https://cdn.example.com/image.png"}],
+            },
+        )
+        fake_session = mock.Mock()
+        fake_download_response = SimpleNamespace(
+            status_code=200,
+            content=PNG_BYTES,
+            headers={"content-type": "image/png"},
+        )
+        fake_session.post.return_value = fake_response
+        fake_session.get.return_value = fake_download_response
+        with mock.patch("services.image_provider.config", fake_config), \
+                mock.patch("services.image_provider.Session", return_value=fake_session), \
+                mock.patch("services.image_provider.save_image_bytes", return_value="https://public.example.com/images/result.png"):
+            list(stream_image_outputs(ConversationRequest(prompt="draw", model="gpt-image-2", response_format="b64_json")))
+        self.assertEqual(fake_session.post.call_args.kwargs["json"]["model"], "gpt-image-2")
 
 
 if __name__ == "__main__":

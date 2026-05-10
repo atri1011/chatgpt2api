@@ -148,9 +148,16 @@ def _linggan10s_model(model: str) -> str:
     return mapped_fallback
 
 
-def _linggan10s_request_payload(request: ConversationRequest) -> dict[str, Any]:
+def _resolve_endpoint_model(endpoint: ImageApiEndpoint, request_model: object) -> str:
+    explicit_model = str(endpoint.upstream_model or "").strip()
+    if explicit_model:
+        return explicit_model
+    return _linggan10s_model(_normalize_model(request_model))
+
+
+def _linggan10s_request_payload(request: ConversationRequest, endpoint: ImageApiEndpoint) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "model": _linggan10s_model(_normalize_model(request.model)),
+        "model": _resolve_endpoint_model(endpoint, request.model),
         "prompt": request.prompt,
         "n": max(1, request.n),
         "size": request.size,
@@ -210,7 +217,7 @@ def _linggan10s_request(endpoint: ImageApiEndpoint, request: ConversationRequest
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
-            json=_linggan10s_request_payload(request),
+            json=_linggan10s_request_payload(request, endpoint),
             timeout=request.timeout_sec or config.image_timeout_sec,
         )
     except Exception as exc:

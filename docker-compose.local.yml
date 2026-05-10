@@ -42,8 +42,10 @@ services:
     #   CHATGPT2API_IMAGE_PROVIDER: chatgpt_web
     #   CHATGPT2API_IMAGE_API_1_BASE_URL: https://image-api-1.example.com
     #   CHATGPT2API_IMAGE_API_1_KEY: sk-image-api-1
+    #   CHATGPT2API_IMAGE_API_1_MODEL: gpt-image-2
     #   CHATGPT2API_IMAGE_API_2_BASE_URL: https://image-api-2.example.com
     #   CHATGPT2API_IMAGE_API_2_KEY: sk-image-api-2
+    #   CHATGPT2API_IMAGE_API_2_MODEL: gpt-image-1
     #   CHATGPT2API_IMAGE_TIMEOUT_SEC: 300
     #   CHATGPT2API_IMAGE_DEFAULT_MODEL: gpt-image-2
     #
@@ -51,4 +53,5 @@ services:
     # 1. 默认 `chatgpt_web` 继续走当前 ChatGPT Web 账号池生图链路
     # 2. 切到 `linggan10s` 时，图生图会先把参考图写到 `/images/*`，再转成上游可回拉 URL
     # 3. 多个编号节点会按编号顺序轮询；若仍想使用旧变量，也兼容 `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`
-    # 4. 若要在 `linggan10s` 下使用图生图，请确保 `CHATGPT2API_BASE_URL` 是公网可访问域名，不要填 localhost/127.0.0.1
+    # 4. 某个节点若配置了 `..._MODEL`，会直接把该模型发给对应上游
+    # 5. 若要在 `linggan10s` 下使用图生图，请确保 `CHATGPT2API_BASE_URL` 是公网可访问域名，不要填 localhost/127.0.0.1
