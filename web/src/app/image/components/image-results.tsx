@@ -30,11 +30,11 @@ export function ImageResults({
   const [imageDimensions, setImageDimensions] = useState<Record<string, string>>({});
 
   const imageSrc = (image: StoredImage) => {
-    if (image.url) {
-      return image.url;
-    }
     if (image.b64_json) {
       return `data:image/png;base64,${image.b64_json}`;
+    }
+    if (image.url) {
+      return image.url;
     }
     return "";
   };

@@ -32,6 +32,16 @@ LINGGAN10S_MODEL_MAPPING = {
     "gpt-5-3": "gpt-image-0",
 }
 
+LINGGAN10S_QUOTA_ERROR_MARKERS = (
+    "余额不足",
+    "星火币",
+    "quota",
+    "insufficient balance",
+    "insufficient quota",
+    "no available channel",
+    "channel for model",
+)
+
 
 def _normalize_model(model: object) -> str:
     return str(model or "").strip() or "gpt-image-2"
@@ -170,9 +180,31 @@ def _linggan10s_request_payload(request: ConversationRequest, endpoint: ImageApi
     return {key: value for key, value in payload.items() if value not in (None, "", [])}
 
 
+def _is_quota_error_message(message: object) -> bool:
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    return any(marker in text for marker in LINGGAN10S_QUOTA_ERROR_MARKERS)
+
+
+def _extract_upstream_error_message(payload: object) -> str:
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("error") or "").strip()
+        if isinstance(error, str):
+            return error.strip()
+        message = payload.get("message")
+        if isinstance(message, str):
+            return message.strip()
+    return ""
+
+
 def _is_retryable_linggan10s_error(error: ImageGenerationError) -> bool:
     if error.error_type == "configuration_error":
         return False
+    if error.code == "insufficient_quota" or _is_quota_error_message(str(error)):
+        return True
     if error.status_code in {400, 401, 403, 404, 422}:
         return False
     return True
@@ -231,13 +263,17 @@ def _linggan10s_request(endpoint: ImageApiEndpoint, request: ConversationRequest
         raise ImageGenerationError(f"invalid upstream response: {response.text}", status_code=502) from exc
 
     if response.status_code < 200 or response.status_code >= 300:
-        error = payload.get("error") if isinstance(payload, dict) else None
-        message = ""
-        if isinstance(error, dict):
-            message = str(error.get("message") or error.get("error") or "")
+        message = _extract_upstream_error_message(payload)
         if not message:
             message = str(payload)
-        raise ImageGenerationError(message or f"upstream status {response.status_code}", status_code=response.status_code)
+        error_type = "insufficient_quota" if _is_quota_error_message(message) else "server_error"
+        error_code = "insufficient_quota" if error_type == "insufficient_quota" else "upstream_error"
+        raise ImageGenerationError(
+            message or f"upstream status {response.status_code}",
+            status_code=response.status_code,
+            error_type=error_type,
+            code=error_code,
+        )
 
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
