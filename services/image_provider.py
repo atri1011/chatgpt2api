@@ -152,6 +152,7 @@ def _linggan10s_request_payload(request: ConversationRequest) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": _linggan10s_model(_normalize_model(request.model)),
         "prompt": request.prompt,
+        "n": max(1, request.n),
         "size": request.size,
     }
     if request.timeout_sec:
@@ -214,7 +215,20 @@ def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise ImageGenerationError("invalid upstream response: data is required")
-    normalized_items = [_normalize_linggan10s_result_item(item, request) for item in data if isinstance(item, dict)]
+    normalized_items: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            normalized_items.append(_normalize_linggan10s_result_item(item, request))
+        except ImageGenerationError:
+            raise
+        except Exception as exc:
+            logger.warning({
+                "event": "linggan10s_item_normalize_failed",
+                "item": item,
+                "error": str(exc),
+            })
     return format_image_result(
         normalized_items,
         request.prompt,
