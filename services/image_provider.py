@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from services.protocol.conversation import (
     collect_image_outputs,
     encode_images,
     format_image_result,
+    save_image_bytes,
     stream_image_chunks,
     stream_image_outputs_with_pool,
 )
@@ -212,14 +214,49 @@ def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise ImageGenerationError("invalid upstream response: data is required")
+    normalized_items = [_normalize_linggan10s_result_item(item, request) for item in data if isinstance(item, dict)]
     return format_image_result(
-        [item for item in data if isinstance(item, dict)],
+        normalized_items,
         request.prompt,
         request.response_format,
         request.base_url,
         int(payload.get("created") or 0) or int(time.time()),
         str(payload.get("message") or ""),
     )
+
+
+def _normalize_linggan10s_result_item(item: dict[str, Any], request: ConversationRequest) -> dict[str, Any]:
+    normalized = dict(item)
+    raw_url = str(item.get("url") or "").strip()
+    raw_b64 = str(item.get("b64_json") or "").strip()
+    source_url = raw_url or (raw_b64 if raw_b64.startswith(("http://", "https://")) else "")
+    if not source_url:
+        return normalized
+
+    image_bytes, content_type = _download_upstream_image_bytes(source_url, request.timeout_sec or config.image_timeout_sec)
+    local_url = save_image_bytes(image_bytes, request.base_url)
+    normalized["url"] = local_url
+    if request.response_format == "b64_json":
+        normalized["b64_json"] = base64.b64encode(image_bytes).decode("ascii")
+    elif raw_b64 and not raw_b64.startswith(("http://", "https://")):
+        normalized["b64_json"] = raw_b64
+    return normalized
+
+
+def _download_upstream_image_bytes(url: str, timeout_sec: int) -> tuple[bytes, str]:
+    session = Session(**proxy_settings.build_session_kwargs(verify=True))
+    try:
+        response = session.get(url, headers={"Accept": "image/*,*/*"}, timeout=timeout_sec)
+    except Exception as exc:
+        raise ImageGenerationError(f"failed to download upstream image: {exc}") from exc
+    finally:
+        session.close()
+    if response.status_code < 200 or response.status_code >= 300:
+        raise ImageGenerationError(f"failed to download upstream image: status={response.status_code}")
+    image_bytes = bytes(response.content or b"")
+    if not image_bytes:
+        raise ImageGenerationError("failed to download upstream image: empty body")
+    return image_bytes, str(response.headers.get("content-type") or "image/png")
 
 
 def image_provider_name() -> str:

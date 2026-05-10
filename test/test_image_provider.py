@@ -69,13 +69,22 @@ class ImageProviderTests(unittest.TestCase):
             },
         )
         fake_session = mock.Mock()
+        fake_download_response = SimpleNamespace(
+            status_code=200,
+            content=PNG_BYTES,
+            headers={"content-type": "image/png"},
+        )
         fake_session.post.return_value = fake_response
-        with mock.patch("services.image_provider.config", fake_config), mock.patch("services.image_provider.Session", return_value=fake_session):
+        fake_session.get.return_value = fake_download_response
+        with mock.patch("services.image_provider.config", fake_config), \
+                mock.patch("services.image_provider.Session", return_value=fake_session), \
+                mock.patch("services.image_provider.save_image_bytes", return_value="https://public.example.com/images/result.png"):
             outputs = list(stream_image_outputs(ConversationRequest(prompt="draw", model="gpt-5-3", response_format="b64_json")))
         self.assertEqual(len(outputs), 1)
         self.assertEqual(outputs[0].kind, "result")
-        self.assertEqual(outputs[0].data[0]["url"], "https://cdn.example.com/image.png")
-        self.assertEqual(outputs[0].data[0]["b64_json"], "https://cdn.example.com/image.png")
+        self.assertEqual(outputs[0].data[0]["url"], "https://public.example.com/images/result.png")
+        self.assertNotEqual(outputs[0].data[0]["b64_json"], "https://cdn.example.com/image.png")
+        self.assertTrue(outputs[0].data[0]["b64_json"])
 
 
 if __name__ == "__main__":
