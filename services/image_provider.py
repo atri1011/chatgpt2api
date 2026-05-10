@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from curl_cffi.requests import Session
 
-from services.config import config
+from services.config import ImageApiEndpoint, config
 from services.protocol.conversation import (
     ConversationRequest,
     ImageOutput,
@@ -163,30 +163,50 @@ def _linggan10s_request_payload(request: ConversationRequest) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value not in (None, "", [])}
 
 
-def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
-    api_base_url = config.image_api_base_url
-    api_key = config.image_api_key
-    if not api_base_url:
+def _is_retryable_linggan10s_error(error: ImageGenerationError) -> bool:
+    if error.error_type == "configuration_error":
+        return False
+    if error.status_code in {400, 401, 403, 404, 422}:
+        return False
+    return True
+
+
+def _linggan10s_endpoints() -> list[ImageApiEndpoint]:
+    error = str(getattr(config, "image_api_configuration_error", "") or "").strip()
+    if error:
+        raise ImageGenerationError(
+            error,
+            status_code=500,
+            error_type="configuration_error",
+            code="invalid_image_api_configuration",
+        )
+    endpoints = list(getattr(config, "image_api_endpoints", []) or [])
+    if endpoints:
+        return endpoints
+    if not config.image_api_base_url:
         raise ImageGenerationError(
             "CHATGPT2API_IMAGE_API_BASE_URL is required when image provider is linggan10s",
             status_code=500,
             error_type="configuration_error",
             code="missing_image_api_base_url",
         )
-    if not api_key:
+    if not config.image_api_key:
         raise ImageGenerationError(
             "CHATGPT2API_IMAGE_API_KEY is required when image provider is linggan10s",
             status_code=500,
             error_type="configuration_error",
             code="missing_image_api_key",
         )
+    return [ImageApiEndpoint(name="CHATGPT2API_IMAGE_API", base_url=config.image_api_base_url, api_key=config.image_api_key)]
 
+
+def _linggan10s_request(endpoint: ImageApiEndpoint, request: ConversationRequest) -> dict[str, Any]:
     session = Session(**proxy_settings.build_session_kwargs(verify=True))
     try:
         response = session.post(
-            f"{api_base_url}/v1/images/generations",
+            f"{endpoint.base_url}/v1/images/generations",
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {endpoint.api_key}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
@@ -194,14 +214,14 @@ def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
             timeout=request.timeout_sec or config.image_timeout_sec,
         )
     except Exception as exc:
-        raise ImageGenerationError(str(exc) or "image generation failed") from exc
+        raise ImageGenerationError(str(exc) or "image generation failed", status_code=502) from exc
     finally:
         session.close()
 
     try:
         payload = response.json()
     except Exception as exc:
-        raise ImageGenerationError(f"invalid upstream response: {response.text}") from exc
+        raise ImageGenerationError(f"invalid upstream response: {response.text}", status_code=502) from exc
 
     if response.status_code < 200 or response.status_code >= 300:
         error = payload.get("error") if isinstance(payload, dict) else None
@@ -210,11 +230,11 @@ def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
             message = str(error.get("message") or error.get("error") or "")
         if not message:
             message = str(payload)
-        raise ImageGenerationError(message or f"upstream status {response.status_code}")
+        raise ImageGenerationError(message or f"upstream status {response.status_code}", status_code=response.status_code)
 
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
-        raise ImageGenerationError("invalid upstream response: data is required")
+        raise ImageGenerationError("invalid upstream response: data is required", status_code=502)
     normalized_items: list[dict[str, Any]] = []
     for item in data:
         if not isinstance(item, dict):
@@ -237,6 +257,33 @@ def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
         int(payload.get("created") or 0) or int(time.time()),
         str(payload.get("message") or ""),
     )
+
+
+def _linggan10s_handle(request: ConversationRequest) -> dict[str, Any]:
+    last_error: ImageGenerationError | None = None
+    endpoints = _linggan10s_endpoints()
+    for index, endpoint in enumerate(endpoints, start=1):
+        try:
+            return _linggan10s_request(endpoint, request)
+        except ImageGenerationError as exc:
+            logger.warning({
+                "event": "linggan10s_upstream_failed",
+                "endpoint": endpoint.name,
+                "base_url": endpoint.base_url,
+                "attempt": index,
+                "total": len(endpoints),
+                "status_code": exc.status_code,
+                "error_type": exc.error_type,
+                "code": exc.code,
+                "message": str(exc),
+            })
+            last_error = exc
+            if not _is_retryable_linggan10s_error(exc) or index >= len(endpoints):
+                raise
+
+    if last_error is not None:
+        raise last_error
+    raise ImageGenerationError("no available image api endpoints", error_type="configuration_error", code="missing_image_api_endpoint")
 
 
 def _normalize_linggan10s_result_item(item: dict[str, Any], request: ConversationRequest) -> dict[str, Any]:

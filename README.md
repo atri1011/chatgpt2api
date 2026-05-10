@@ -40,8 +40,8 @@ docker compose up -d
 支持的环境变量：
 
 - `CHATGPT2API_IMAGE_PROVIDER`：可选值 `chatgpt_web` / `linggan10s`，默认 `chatgpt_web`
-- `CHATGPT2API_IMAGE_API_BASE_URL`：`linggan10s` provider 的上游 API Base URL
-- `CHATGPT2API_IMAGE_API_KEY`：`linggan10s` provider 的上游 API Key
+- `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：单个 `linggan10s` 上游节点配置，保留兼容
+- `CHATGPT2API_IMAGE_API_<N>_BASE_URL` / `CHATGPT2API_IMAGE_API_<N>_KEY`：多个 `linggan10s` 上游节点配置，`<N>` 从 `1` 开始递增
 - `CHATGPT2API_IMAGE_TIMEOUT_SEC`：可选，图片请求超时时间，默认 `300`
 - `CHATGPT2API_IMAGE_DEFAULT_MODEL`：可选，未识别图片模型时的回退模型，默认 `gpt-image-2`
 
@@ -50,6 +50,7 @@ docker compose up -d
 - 以上图片 provider 配置均为只读环境变量，不会写入后台设置页，也不会保存到 `config.json`
 - `chatgpt_web` provider 继续使用现有 ChatGPT Web 账号池 / Token 轮询逻辑
 - `linggan10s` provider 通过 `POST /v1/images/generations` 完成文生图与图生图；`/v1/images/edits` 会在服务端先把参考图落到 `/images/*`，再转换为上游可回拉的 URL
+- 若同时配置单节点变量和编号变量，服务端会优先使用编号变量；多个编号节点会按编号顺序轮询，遇到可恢复的上游错误会自动切到下一个节点
 - 若使用 `linggan10s` provider 的图生图，请务必配置可被上游访问的公网 `CHATGPT2API_BASE_URL`；如果 `base_url` 缺失，或仍是 `localhost` / `127.0.0.1` 这类本地地址，服务端会直接返回错误，而不是伪造成功
 
 示例：切换到 `linggan10s`
@@ -57,8 +58,10 @@ docker compose up -d
 ```yaml
 environment:
   - CHATGPT2API_IMAGE_PROVIDER=linggan10s
-  - CHATGPT2API_IMAGE_API_BASE_URL=https://your-image-api.example.com
-  - CHATGPT2API_IMAGE_API_KEY=sk-your-image-api-key
+  - CHATGPT2API_IMAGE_API_1_BASE_URL=https://image-api-1.example.com
+  - CHATGPT2API_IMAGE_API_1_KEY=sk-image-api-1
+  - CHATGPT2API_IMAGE_API_2_BASE_URL=https://image-api-2.example.com
+  - CHATGPT2API_IMAGE_API_2_KEY=sk-image-api-2
   - CHATGPT2API_BASE_URL=https://your-public-domain.com
   - CHATGPT2API_IMAGE_TIMEOUT_SEC=300
   - CHATGPT2API_IMAGE_DEFAULT_MODEL=gpt-image-2
@@ -157,7 +160,8 @@ windows_run.bat
    - `CHATGPT2API_DATA_DIR`：自定义运行期数据目录
    - `CHATGPT2API_ENABLE_BACKGROUND_WATCHER=false`：显式关闭后台刷新线程
    - `CHATGPT2API_IMAGE_PROVIDER`：切换图片 provider，默认 `chatgpt_web`
-   - `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：当图片 provider 为 `linggan10s` 时必填
+   - `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：单个图片上游节点配置
+   - `CHATGPT2API_IMAGE_API_<N>_BASE_URL` / `CHATGPT2API_IMAGE_API_<N>_KEY`：多个图片上游节点配置，优先级高于单节点变量
    - `CHATGPT2API_IMAGE_TIMEOUT_SEC`：可选，图片请求超时时间
    - `CHATGPT2API_IMAGE_DEFAULT_MODEL`：可选，未识别图片模型时的回退模型
    - `CHATGPT2API_BASE_URL`：若你需要在 `linggan10s` provider 下使用图生图，建议显式配置公网可访问域名

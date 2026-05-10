@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -23,6 +24,13 @@ class LoadedSettings:
     auth_key: str
     refresh_account_interval_minute: int
     enable_background_watcher: bool
+
+
+@dataclass(frozen=True)
+class ImageApiEndpoint:
+    name: str
+    base_url: str
+    api_key: str
 
 
 def _normalize_auth_key(value: object) -> str:
@@ -58,6 +66,43 @@ def _env_flag(name: str, default: bool) -> bool:
 
 def _env_text(name: str) -> str:
     return str(os.getenv(name) or "").strip()
+
+
+def _resolve_image_api_endpoints() -> tuple[list[ImageApiEndpoint], str | None]:
+    pattern = re.compile(r"^CHATGPT2API_IMAGE_API_(\d+)_(BASE_URL|KEY)$")
+    grouped: dict[int, dict[str, str]] = {}
+    for name, raw_value in os.environ.items():
+        match = pattern.match(str(name))
+        if not match:
+            continue
+        index = int(match.group(1))
+        field = match.group(2)
+        grouped.setdefault(index, {})[field] = str(raw_value or "").strip()
+
+    if grouped:
+        endpoints: list[ImageApiEndpoint] = []
+        for index in sorted(grouped):
+            label = f"CHATGPT2API_IMAGE_API_{index}"
+            base_url = str(grouped[index].get("BASE_URL") or "").strip().rstrip("/")
+            api_key = str(grouped[index].get("KEY") or "").strip()
+            if not base_url and not api_key:
+                continue
+            if not base_url:
+                return [], f"{label}_BASE_URL is required when {label}_KEY is set"
+            if not api_key:
+                return [], f"{label}_KEY is required when {label}_BASE_URL is set"
+            endpoints.append(ImageApiEndpoint(name=label, base_url=base_url, api_key=api_key))
+        return endpoints, None
+
+    base_url = _env_text("CHATGPT2API_IMAGE_API_BASE_URL").rstrip("/")
+    api_key = _env_text("CHATGPT2API_IMAGE_API_KEY")
+    if base_url and api_key:
+        return [ImageApiEndpoint(name="CHATGPT2API_IMAGE_API", base_url=base_url, api_key=api_key)], None
+    if base_url:
+        return [], "CHATGPT2API_IMAGE_API_KEY is required when CHATGPT2API_IMAGE_API_BASE_URL is set"
+    if api_key:
+        return [], "CHATGPT2API_IMAGE_API_BASE_URL is required when CHATGPT2API_IMAGE_API_KEY is set"
+    return [], None
 
 
 def _load_settings() -> LoadedSettings:
@@ -193,11 +238,27 @@ class ConfigStore:
 
     @property
     def image_api_base_url(self) -> str:
+        endpoints = self.image_api_endpoints
+        if endpoints:
+            return endpoints[0].base_url
         return _env_text("CHATGPT2API_IMAGE_API_BASE_URL").rstrip("/")
 
     @property
     def image_api_key(self) -> str:
+        endpoints = self.image_api_endpoints
+        if endpoints:
+            return endpoints[0].api_key
         return _env_text("CHATGPT2API_IMAGE_API_KEY")
+
+    @property
+    def image_api_endpoints(self) -> list[ImageApiEndpoint]:
+        endpoints, _ = _resolve_image_api_endpoints()
+        return endpoints
+
+    @property
+    def image_api_configuration_error(self) -> str:
+        _, error = _resolve_image_api_endpoints()
+        return error or ""
 
     @property
     def image_timeout_sec(self) -> int:
@@ -228,9 +289,10 @@ class ConfigStore:
         data["log_levels"] = self.log_levels
         data["image_provider"] = self.image_provider
         data["image_api_base_url"] = self.image_api_base_url
+        data["image_api_endpoint_count"] = len(self.image_api_endpoints)
         data["image_timeout_sec"] = self.image_timeout_sec
         data["image_default_model"] = self.image_default_model
-        data["has_image_api_key"] = bool(self.image_api_key)
+        data["has_image_api_key"] = bool(self.image_api_key or _env_text("CHATGPT2API_IMAGE_API_KEY"))
         data.pop("auth-key", None)
         return data
 
@@ -243,6 +305,7 @@ class ConfigStore:
             "image_provider",
             "image_api_base_url",
             "image_api_key",
+            "image_api_endpoint_count",
             "image_timeout_sec",
             "image_default_model",
             "has_image_api_key",
