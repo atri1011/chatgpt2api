@@ -53,6 +53,11 @@ type AccountUpdateResponse = {
 export type SettingsConfig = {
   proxy: string;
   base_url?: string;
+  image_provider?: ImageProvider;
+  image_api_base_url?: string;
+  image_api_endpoint_count?: number;
+  has_image_api_key?: boolean;
+  image_default_model?: string;
   refresh_account_interval_minute?: number | string;
   image_retention_days?: number | string;
   auto_remove_invalid_accounts?: boolean;
@@ -60,6 +65,8 @@ export type SettingsConfig = {
   log_levels?: string[];
   [key: string]: unknown;
 };
+
+export type ImageProvider = "chatgpt_web" | "linggan10s";
 
 export type ManagedImage = {
   name: string;

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { testProxy, type ProxyTestResult } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { testProxy, type ImageProvider, type ProxyTestResult } from "@/lib/api";
 
 import { useSettingsStore } from "../store";
 
@@ -23,10 +24,14 @@ export function ConfigCard() {
   const setImageRetentionDays = useSettingsStore((state) => state.setImageRetentionDays);
   const setAutoRemoveInvalidAccounts = useSettingsStore((state) => state.setAutoRemoveInvalidAccounts);
   const setAutoRemoveRateLimitedAccounts = useSettingsStore((state) => state.setAutoRemoveRateLimitedAccounts);
+  const setImageProvider = useSettingsStore((state) => state.setImageProvider);
   const setLogLevel = useSettingsStore((state) => state.setLogLevel);
   const setProxy = useSettingsStore((state) => state.setProxy);
   const setBaseUrl = useSettingsStore((state) => state.setBaseUrl);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
+  const currentImageProvider = config?.image_provider === "linggan10s" ? "linggan10s" : "chatgpt_web";
+  const linggan10sEndpointCount = Number(config?.image_api_endpoint_count || 0);
+  const hasLinggan10sConfig = linggan10sEndpointCount > 0 && Boolean(config?.has_image_api_key);
 
   const handleTestProxy = async () => {
     const candidate = String(config?.proxy || "").trim();
@@ -65,7 +70,7 @@ export function ConfigCard() {
     <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
       <CardContent className="space-y-4 p-6">
         <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-600">
-          管理员登录密钥继续从部署配置读取，不再在此页面展示；如需分发给其他人，请在下方创建普通用户密钥。
+          管理员登录密钥继续从部署配置读取，不在此页面展示；图片上游 API Key 也仍然只走环境变量。如需分发给其他人，请在下方创建普通用户密钥。
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -125,6 +130,32 @@ export function ConfigCard() {
               className="h-10 rounded-xl border-stone-200 bg-white"
             />
             <p className="text-xs text-stone-500">用于生成图片结果的访问前缀地址。</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-stone-700">图片 Provider</label>
+            <Select value={currentImageProvider} onValueChange={(value) => setImageProvider(value as ImageProvider)}>
+              <SelectTrigger className="h-10 rounded-xl border-stone-200 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chatgpt_web">chatgpt_web</SelectItem>
+                <SelectItem value="linggan10s">linggan10s</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-stone-500">`chatgpt_web` 走内置账号池，`linggan10s` 走环境变量里的图片上游节点。</p>
+            {currentImageProvider === "linggan10s" ? (
+              <div
+                className={`rounded-xl border px-3 py-2 text-xs leading-6 ${
+                  hasLinggan10sConfig
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {hasLinggan10sConfig
+                  ? `已检测到 ${linggan10sEndpointCount} 个 linggan10s 上游节点，默认模型 ${String(config?.image_default_model || "gpt-image-2")}。`
+                  : "当前未检测到完整的 linggan10s 上游环境变量配置。切换前请先配置 CHATGPT2API_IMAGE_API_<N>_BASE_URL / KEY 或单节点变量。"}
+              </div>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className="text-sm text-stone-700">图片自动清理</label>

@@ -35,11 +35,11 @@ docker compose up -d
 
 ### 图片 Provider 配置
 
-默认情况下，所有图片入口都会走 `chatgpt_web`，也就是当前仓库原有的 ChatGPT Web 账号池生图链路。若你希望切换到外部 OpenAI 兼容图片服务，可通过环境变量启用 `linggan10s` provider。
+默认情况下，所有图片入口都会走 `chatgpt_web`，也就是当前仓库原有的 ChatGPT Web 账号池生图链路。现在也可以在网站后台“设置 -> 系统配置”里直接切换 `chatgpt_web` / `linggan10s`；如果后台还没保存过，则继续使用环境变量里的 `CHATGPT2API_IMAGE_PROVIDER` 作为兜底值。
 
 支持的环境变量：
 
-- `CHATGPT2API_IMAGE_PROVIDER`：可选值 `chatgpt_web` / `linggan10s`，默认 `chatgpt_web`
+- `CHATGPT2API_IMAGE_PROVIDER`：可选值 `chatgpt_web` / `linggan10s`，默认 `chatgpt_web`；现在更多作为启动时兜底值，后台设置页可覆盖并保存
 - `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：单个 `linggan10s` 上游节点配置，保留兼容
 - `CHATGPT2API_IMAGE_API_MODEL`：单个 `linggan10s` 上游节点的上游模型覆盖，可选
 - `CHATGPT2API_IMAGE_API_<N>_BASE_URL` / `CHATGPT2API_IMAGE_API_<N>_KEY`：多个 `linggan10s` 上游节点配置，`<N>` 从 `1` 开始递增
@@ -49,7 +49,8 @@ docker compose up -d
 
 说明：
 
-- 以上图片 provider 配置均为只读环境变量，不会写入后台设置页，也不会保存到 `config.json`
+- `image_provider` 现在可在后台设置页里切换，并保存到 `config.json`；若未设置，才会回退到环境变量 `CHATGPT2API_IMAGE_PROVIDER`
+- 除 `image_provider` 外，其余图片上游配置仍然都是只读环境变量，不会写入后台设置页
 - `chatgpt_web` provider 继续使用现有 ChatGPT Web 账号池 / Token 轮询逻辑
 - `linggan10s` provider 通过 `POST /v1/images/generations` 完成文生图与图生图；`/v1/images/edits` 会在服务端先把参考图落到 `/images/*`，再转换为上游可回拉的 URL
 - 若同时配置单节点变量和编号变量，服务端会优先使用编号变量；多个编号节点会按编号顺序轮询，遇到可恢复的上游错误会自动切到下一个节点
@@ -164,7 +165,7 @@ windows_run.bat
    - `CHATGPT2API_CONFIG_FILE`：自定义配置文件路径
    - `CHATGPT2API_DATA_DIR`：自定义运行期数据目录
    - `CHATGPT2API_ENABLE_BACKGROUND_WATCHER=false`：显式关闭后台刷新线程
-   - `CHATGPT2API_IMAGE_PROVIDER`：切换图片 provider，默认 `chatgpt_web`
+   - `CHATGPT2API_IMAGE_PROVIDER`：图片 provider 的启动兜底值，默认 `chatgpt_web`；也可在后台设置页里切换并保存
    - `CHATGPT2API_IMAGE_API_BASE_URL` / `CHATGPT2API_IMAGE_API_KEY`：单个图片上游节点配置
    - `CHATGPT2API_IMAGE_API_MODEL`：单个图片上游节点的上游模型覆盖，可选
    - `CHATGPT2API_IMAGE_API_<N>_BASE_URL` / `CHATGPT2API_IMAGE_API_<N>_KEY`：多个图片上游节点配置，优先级高于单节点变量

@@ -96,6 +96,39 @@ class ConfigLoadingTests(unittest.TestCase):
         self.assertEqual(endpoints, [])
         self.assertIn("CHATGPT2API_IMAGE_API_1_KEY is required", str(error))
 
+    def test_image_provider_can_be_saved_without_persisting_sensitive_image_fields(self) -> None:
+        module = self.config_module
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "config.json"
+            config_path.write_text(json.dumps({
+                "auth-key": "test-auth",
+                "image_provider": "linggan10s",
+            }), encoding="utf-8")
+            old_data_dir = module.DATA_DIR
+            old_env_provider = module.os.environ.get("CHATGPT2API_IMAGE_PROVIDER")
+            try:
+                module.DATA_DIR = Path(tmp_dir) / "data"
+                module.os.environ["CHATGPT2API_IMAGE_PROVIDER"] = "chatgpt_web"
+                store = module.ConfigStore(config_path)
+
+                self.assertEqual(store.image_provider, "linggan10s")
+
+                updated = store.update({
+                    "image_provider": "chatgpt_web",
+                    "image_api_key": "sk-should-not-persist",
+                })
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+
+                self.assertEqual(updated["image_provider"], "chatgpt_web")
+                self.assertEqual(saved.get("image_provider"), "chatgpt_web")
+                self.assertNotIn("image_api_key", saved)
+            finally:
+                module.DATA_DIR = old_data_dir
+                if old_env_provider is None:
+                    module.os.environ.pop("CHATGPT2API_IMAGE_PROVIDER", None)
+                else:
+                    module.os.environ["CHATGPT2API_IMAGE_PROVIDER"] = old_env_provider
+
 
 if __name__ == "__main__":
     unittest.main()

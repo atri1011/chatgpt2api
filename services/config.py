@@ -34,12 +34,20 @@ class ImageApiEndpoint:
     upstream_model: str = ""
 
 
+SUPPORTED_IMAGE_PROVIDERS = {"chatgpt_web", "linggan10s"}
+
+
 def _normalize_auth_key(value: object) -> str:
     return str(value or "").strip()
 
 
 def _is_invalid_auth_key(value: object) -> bool:
     return _normalize_auth_key(value) == ""
+
+
+def _normalize_image_provider(value: object) -> str:
+    provider = str(value or "").strip().lower()
+    return provider if provider in SUPPORTED_IMAGE_PROVIDERS else ""
 
 
 def _read_json_object(path: Path, *, name: str) -> dict[str, object]:
@@ -246,8 +254,11 @@ class ConfigStore:
 
     @property
     def image_provider(self) -> str:
-        provider = _env_text("CHATGPT2API_IMAGE_PROVIDER").lower()
-        return provider if provider in {"chatgpt_web", "linggan10s"} else "chatgpt_web"
+        stored_provider = _normalize_image_provider(self.data.get("image_provider"))
+        if stored_provider:
+            return stored_provider
+        env_provider = _normalize_image_provider(os.getenv("CHATGPT2API_IMAGE_PROVIDER"))
+        return env_provider or "chatgpt_web"
 
     @property
     def image_api_base_url(self) -> str:
@@ -315,7 +326,6 @@ class ConfigStore:
     def update(self, data: dict[str, object]) -> dict[str, object]:
         next_data = dict(self.data)
         readonly_keys = {
-            "image_provider",
             "image_api_base_url",
             "image_api_key",
             "image_api_endpoint_count",
@@ -324,6 +334,11 @@ class ConfigStore:
             "has_image_api_key",
         }
         next_data.update({key: value for key, value in dict(data or {}).items() if key not in readonly_keys})
+        image_provider = _normalize_image_provider(next_data.get("image_provider"))
+        if image_provider:
+            next_data["image_provider"] = image_provider
+        else:
+            next_data.pop("image_provider", None)
         self.data = next_data
         self._save()
         return self.get()

@@ -19,6 +19,7 @@ import {
   updateSettingsConfig,
   type CPAPool,
   type CPARemoteFile,
+  type ImageProvider,
   type RegisterConfig,
   type SettingsConfig,
 } from "@/lib/api";
@@ -27,9 +28,17 @@ export const PAGE_SIZE_OPTIONS = ["50", "100", "200"] as const;
 
 export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
 
+function normalizeImageProvider(value: unknown): ImageProvider {
+  return value === "linggan10s" ? "linggan10s" : "chatgpt_web";
+}
+
 function normalizeConfig(config: SettingsConfig): SettingsConfig {
   return {
     ...config,
+    image_provider: normalizeImageProvider(config.image_provider),
+    image_api_endpoint_count: Math.max(0, Number(config.image_api_endpoint_count || 0)),
+    has_image_api_key: Boolean(config.has_image_api_key),
+    image_default_model: typeof config.image_default_model === "string" ? config.image_default_model : "",
     refresh_account_interval_minute: Number(config.refresh_account_interval_minute || 5),
     image_retention_days: Number(config.image_retention_days || 30),
     auto_remove_invalid_accounts: Boolean(config.auto_remove_invalid_accounts),
@@ -95,6 +104,7 @@ type SettingsStore = {
   setImageRetentionDays: (value: string) => void;
   setAutoRemoveInvalidAccounts: (value: boolean) => void;
   setAutoRemoveRateLimitedAccounts: (value: boolean) => void;
+  setImageProvider: (value: ImageProvider) => void;
   setLogLevel: (level: string, enabled: boolean) => void;
   setProxy: (value: string) => void;
   setBaseUrl: (value: string) => void;
@@ -196,6 +206,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       const data = await updateSettingsConfig({
         ...config,
+        image_provider: normalizeImageProvider(config.image_provider),
         refresh_account_interval_minute: Math.max(1, Number(config.refresh_account_interval_minute) || 1),
         image_retention_days: Math.max(1, Number(config.image_retention_days) || 30),
         auto_remove_invalid_accounts: Boolean(config.auto_remove_invalid_accounts),
@@ -238,6 +249,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setAutoRemoveRateLimitedAccounts: (value) => {
     set((state) => state.config ? { config: { ...state.config, auto_remove_rate_limited_accounts: value } } : {});
+  },
+
+  setImageProvider: (value) => {
+    set((state) => state.config ? { config: { ...state.config, image_provider: value } } : {});
   },
 
   setLogLevel: (level, enabled) => {
