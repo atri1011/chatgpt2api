@@ -154,7 +154,8 @@ windows_run.bat
 前置说明：
 - Vercel 上的 Python API 以 Serverless Function 方式运行，不适合长期常驻后台线程。
 - 项目已自动在 `VERCEL=1` 时关闭账号后台刷新线程，并把运行期数据目录切到临时目录。
-- 持久配置建议优先使用 Vercel 环境变量，而不是依赖仓库内 `config.json`。
+- 未显式设置 `CHATGPT2API_CONFIG_FILE` 时，运行期会把仓库根的 `config.json` 复制到临时 `DATA_DIR/config.json` 后再读写，避免后台设置页保存时报 500。
+- 持久配置建议优先使用 Vercel 环境变量，而不是依赖临时 `config.json`；临时文件里的设置在实例重启后仍可能丢失。
 
 步骤：
 

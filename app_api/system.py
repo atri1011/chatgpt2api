@@ -45,7 +45,10 @@ def create_router(app_version: str) -> APIRouter:
     @router.post("/api/settings")
     async def save_settings(body: SettingsUpdateRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
-        return {"config": config.update(body.model_dump(mode="python"))}
+        try:
+            return {"config": config.update(body.model_dump(mode="python"))}
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail={"error": f"保存配置失败: {exc}"}) from exc
 
     @router.get("/api/images")
     async def get_images(request: Request, start_date: str = "", end_date: str = "", authorization: str | None = Header(default=None)):
@@ -75,7 +78,7 @@ def create_router(app_version: str) -> APIRouter:
             "runtime": {
                 "is_vercel": IS_VERCEL,
                 "data_dir": str(DATA_DIR),
-                "config_file": str(CONFIG_FILE),
+                "config_file": str(config.path),
             },
         }
 

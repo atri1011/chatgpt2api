@@ -129,6 +129,57 @@ class ConfigLoadingTests(unittest.TestCase):
                 else:
                     module.os.environ["CHATGPT2API_IMAGE_PROVIDER"] = old_env_provider
 
+    def test_vercel_runtime_config_file_is_seeded_from_repo_config(self) -> None:
+        module = self.config_module
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir) / "repo"
+            data_dir = Path(tmp_dir) / "runtime"
+            base_dir.mkdir()
+            data_dir.mkdir()
+            repo_config_path = base_dir / "config.json"
+            repo_config_path.write_text(json.dumps({
+                "auth-key": "repo-auth",
+                "image_provider": "linggan10s",
+            }), encoding="utf-8")
+
+            old_base_dir = module.BASE_DIR
+            old_data_dir = module.DATA_DIR
+            old_default_config_file = module.DEFAULT_CONFIG_FILE
+            old_config_file = module.CONFIG_FILE
+            old_is_vercel = module.IS_VERCEL
+            old_env_config_file = module.os.environ.get("CHATGPT2API_CONFIG_FILE")
+            try:
+                module.BASE_DIR = base_dir
+                module.DATA_DIR = data_dir
+                module.DEFAULT_CONFIG_FILE = repo_config_path
+                module.CONFIG_FILE = repo_config_path
+                module.IS_VERCEL = True
+                module.os.environ.pop("CHATGPT2API_CONFIG_FILE", None)
+
+                resolved = module._resolve_config_file()
+                copied = json.loads(resolved.read_text(encoding="utf-8"))
+
+                self.assertEqual(resolved, data_dir / "config.json")
+                self.assertEqual(copied.get("auth-key"), "repo-auth")
+                self.assertEqual(copied.get("image_provider"), "linggan10s")
+
+                store = module.ConfigStore(resolved)
+                updated = store.update({"image_provider": "chatgpt_web"})
+                saved = json.loads(resolved.read_text(encoding="utf-8"))
+
+                self.assertEqual(updated["image_provider"], "chatgpt_web")
+                self.assertEqual(saved.get("image_provider"), "chatgpt_web")
+            finally:
+                module.BASE_DIR = old_base_dir
+                module.DATA_DIR = old_data_dir
+                module.DEFAULT_CONFIG_FILE = old_default_config_file
+                module.CONFIG_FILE = old_config_file
+                module.IS_VERCEL = old_is_vercel
+                if old_env_config_file is None:
+                    module.os.environ.pop("CHATGPT2API_CONFIG_FILE", None)
+                else:
+                    module.os.environ["CHATGPT2API_CONFIG_FILE"] = old_env_config_file
+
 
 if __name__ == "__main__":
     unittest.main()

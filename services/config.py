@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 IS_VERCEL = os.getenv("VERCEL") == "1"
 DEFAULT_DATA_DIR = Path(gettempdir()) / "chatgpt2api" if IS_VERCEL else BASE_DIR / "data"
 DATA_DIR = Path(os.getenv("CHATGPT2API_DATA_DIR") or DEFAULT_DATA_DIR)
-CONFIG_FILE = Path(os.getenv("CHATGPT2API_CONFIG_FILE") or (BASE_DIR / "config.json"))
+DEFAULT_CONFIG_FILE = BASE_DIR / "config.json"
 VERSION_FILE = BASE_DIR / "VERSION"
 
 
@@ -77,6 +77,28 @@ def _env_text(name: str) -> str:
     return str(os.getenv(name) or "").strip()
 
 
+def _write_json_object(path: Path, data: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _resolve_config_file() -> Path:
+    configured_path = _env_text("CHATGPT2API_CONFIG_FILE")
+    if configured_path:
+        return Path(configured_path)
+    if not IS_VERCEL:
+        return DEFAULT_CONFIG_FILE
+
+    runtime_config_file = DATA_DIR / "config.json"
+    if runtime_config_file.exists():
+        return runtime_config_file
+
+    seed_data = _read_json_object(DEFAULT_CONFIG_FILE, name="config.json")
+    if seed_data:
+        _write_json_object(runtime_config_file, seed_data)
+    return runtime_config_file
+
+
 def _resolve_image_api_endpoints() -> tuple[list[ImageApiEndpoint], str | None]:
     pattern = re.compile(r"^CHATGPT2API_IMAGE_API_(\d+)_(BASE_URL|KEY|MODEL)$")
     grouped: dict[int, dict[str, str]] = {}
@@ -124,6 +146,9 @@ def _resolve_image_api_endpoints() -> tuple[list[ImageApiEndpoint], str | None]:
     if api_key:
         return [], "CHATGPT2API_IMAGE_API_BASE_URL is required when CHATGPT2API_IMAGE_API_KEY is set"
     return [], None
+
+
+CONFIG_FILE = _resolve_config_file()
 
 
 def _load_settings() -> LoadedSettings:
@@ -174,7 +199,7 @@ class ConfigStore:
         return _read_json_object(self.path, name="config.json")
 
     def _save(self) -> None:
-        self.path.write_text(json.dumps(self.data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _write_json_object(self.path, self.data)
 
     @property
     def auth_key(self) -> str:
