@@ -37,6 +37,11 @@ DEFAULT_IMAGE_STORAGE = {
     "public_base_url": "",
 }
 
+IMAGE_PROVIDER_CHATGPT_WEB = "chatgpt_web"
+IMAGE_PROVIDER_NEWAPI = "newapi"
+IMAGE_PROVIDERS = {IMAGE_PROVIDER_CHATGPT_WEB, IMAGE_PROVIDER_NEWAPI}
+DEFAULT_NEWAPI_IMAGE_MODEL = "gpt-image-1"
+
 
 def _normalize_bool(value: object, default: bool = False) -> bool:
     if isinstance(value, str):
@@ -56,6 +61,11 @@ def _normalize_positive_int(value: object, default: int, minimum: int = 0) -> in
     except (TypeError, ValueError):
         normalized = default
     return max(minimum, normalized)
+
+
+def _normalize_image_provider(value: object) -> str:
+    provider = str(value or "").strip().lower()
+    return provider if provider in IMAGE_PROVIDERS else IMAGE_PROVIDER_CHATGPT_WEB
 
 
 def _normalize_backup_include(value: object) -> dict[str, bool]:
@@ -251,6 +261,34 @@ class ConfigStore:
             return 3
 
     @property
+    def image_provider(self) -> str:
+        return _normalize_image_provider(self.data.get("image_provider") or os.getenv("CHATGPT2API_IMAGE_PROVIDER"))
+
+    @property
+    def newapi_image_base_url(self) -> str:
+        return str(os.getenv("CHATGPT2API_NEWAPI_BASE_URL") or "").strip().rstrip("/")
+
+    @property
+    def newapi_image_api_key(self) -> str:
+        return str(os.getenv("CHATGPT2API_NEWAPI_API_KEY") or "").strip()
+
+    @property
+    def newapi_image_model(self) -> str:
+        return str(os.getenv("CHATGPT2API_NEWAPI_IMAGE_MODEL") or DEFAULT_NEWAPI_IMAGE_MODEL).strip() or DEFAULT_NEWAPI_IMAGE_MODEL
+
+    @property
+    def newapi_image_timeout_sec(self) -> int:
+        return _normalize_positive_int(os.getenv("CHATGPT2API_NEWAPI_TIMEOUT_SEC"), 300, 1)
+
+    def get_newapi_image_settings(self) -> dict[str, object]:
+        return {
+            "base_url_configured": bool(self.newapi_image_base_url),
+            "api_key_configured": bool(self.newapi_image_api_key),
+            "image_model": self.newapi_image_model,
+            "timeout_sec": self.newapi_image_timeout_sec,
+        }
+
+    @property
     def auto_remove_invalid_accounts(self) -> bool:
         value = self.data.get("auto_remove_invalid_accounts", False)
         if isinstance(value, str):
@@ -336,6 +374,8 @@ class ConfigStore:
         data["image_poll_interval_secs"] = self.image_poll_interval_secs
         data["image_poll_initial_wait_secs"] = self.image_poll_initial_wait_secs
         data["image_account_concurrency"] = self.image_account_concurrency
+        data["image_provider"] = self.image_provider
+        data["newapi_image"] = self.get_newapi_image_settings()
         data["auto_remove_invalid_accounts"] = self.auto_remove_invalid_accounts
         data["auto_remove_rate_limited_accounts"] = self.auto_remove_rate_limited_accounts
         data["log_levels"] = self.log_levels
@@ -358,6 +398,16 @@ class ConfigStore:
         if "image_storage" in next_data:
             next_data["image_storage"] = _normalize_image_storage_settings(next_data.get("image_storage"))
             _validate_image_storage_settings(next_data["image_storage"])
+        if "image_provider" in next_data:
+            next_data["image_provider"] = _normalize_image_provider(next_data.get("image_provider"))
+        for key in (
+            "newapi_image",
+            "newapi_image_base_url",
+            "newapi_image_api_key",
+            "newapi_image_model",
+            "newapi_image_timeout_sec",
+        ):
+            next_data.pop(key, None)
         next_data.pop("backup_state", None)
         self.data = next_data
         self._save()

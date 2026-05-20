@@ -10,10 +10,15 @@ from typing import Any, Iterable, Iterator
 import tiktoken
 
 from services.account_service import account_service
-from services.config import config
+from services.config import IMAGE_PROVIDER_NEWAPI, config
 from services.image_storage_service import image_storage_service
+from services.newapi_image_provider import (
+    NewAPIImageProviderConfigError,
+    NewAPIImageProviderResponseError,
+    newapi_image_provider,
+)
 from services.openai_backend_api import ImagePollTimeoutError, OpenAIBackendAPI
-from utils.helper import IMAGE_MODELS, extract_image_from_message_content
+from utils.helper import IMAGE_MODELS, UpstreamHTTPError, extract_image_from_message_content
 from utils.log import logger
 
 
@@ -218,6 +223,7 @@ class ConversationRequest:
     response_format: str = "b64_json"
     base_url: str | None = None
     message_as_error: bool = False
+    image_files: list[tuple[bytes, str, str]] | None = None
 
 
 @dataclass
@@ -609,9 +615,100 @@ def stream_image_outputs(
         yield ImageOutput(kind="message", model=request.model, index=index, total=total, text=message)
 
 
+def _newapi_image_files(request: ConversationRequest) -> list[tuple[bytes, str, str]]:
+    if request.image_files:
+        return list(request.image_files)
+    files: list[tuple[bytes, str, str]] = []
+    for index, image in enumerate(request.images or [], start=1):
+        payload = str(image or "")
+        if payload.startswith("data:") and "," in payload:
+            payload = payload.split(",", 1)[1]
+        if not payload:
+            continue
+        files.append((base64.b64decode(payload), f"image_{index}.png", "image/png"))
+    return files
+
+
+def _newapi_upstream_message(exc: UpstreamHTTPError) -> str:
+    body = exc.body
+    message = ""
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or "")
+        message = message or str(body.get("message") or body.get("error") or "")
+    elif body:
+        message = str(body)
+    return f"NewAPI image request failed: {message or str(exc)}"
+
+
+def stream_newapi_image_outputs(request: ConversationRequest) -> Iterator[ImageOutput]:
+    try:
+        image_files = _newapi_image_files(request)
+        if image_files:
+            result = newapi_image_provider.edit(
+                prompt=request.prompt,
+                model=request.model,
+                n=request.n,
+                size=request.size,
+                response_format=request.response_format,
+                images=image_files,
+            )
+        else:
+            result = newapi_image_provider.generate(
+                prompt=request.prompt,
+                model=request.model,
+                n=request.n,
+                size=request.size,
+                response_format=request.response_format,
+            )
+        data = format_image_result(
+            result.items,
+            request.prompt,
+            request.response_format,
+            request.base_url,
+            result.created,
+        )["data"]
+        if not data:
+            raise NewAPIImageProviderResponseError("NewAPI image response did not include usable images")
+        yield ImageOutput(kind="result", model=request.model, index=1, total=request.n, data=data, created=result.created)
+    except NewAPIImageProviderConfigError as exc:
+        raise ImageGenerationError(
+            str(exc),
+            status_code=400,
+            error_type="invalid_request_error",
+            code="missing_newapi_config",
+        ) from exc
+    except UpstreamHTTPError as exc:
+        raise ImageGenerationError(
+            _newapi_upstream_message(exc),
+            status_code=exc.status_code,
+            error_type="upstream_error",
+            code="newapi_upstream_error",
+        ) from exc
+    except NewAPIImageProviderResponseError as exc:
+        raise ImageGenerationError(
+            str(exc) or "NewAPI image generation failed",
+            status_code=502,
+            error_type="server_error",
+            code="newapi_response_error",
+        ) from exc
+    except Exception as exc:
+        raise ImageGenerationError(
+            str(exc) or "NewAPI image generation failed",
+            status_code=502,
+            error_type="server_error",
+            code="newapi_error",
+        ) from exc
+
+
 def stream_image_outputs_with_pool(request: ConversationRequest) -> Iterator[ImageOutput]:
     if str(request.model or "").strip() not in IMAGE_MODELS:
         raise ImageGenerationError("unsupported image model,supported models: " + ", ".join(IMAGE_MODELS))
+
+    if config.image_provider == IMAGE_PROVIDER_NEWAPI:
+        yield from stream_newapi_image_outputs(request)
+        return
 
     emitted = False
     last_error = ""

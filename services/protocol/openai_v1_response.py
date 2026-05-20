@@ -196,8 +196,10 @@ def response_events(body: dict[str, Any]) -> Iterator[dict[str, Any]]:
     image_info = extract_response_image(body.get("input"))
     if image_info:
         image_data, mime_type = image_info
-        images = encode_images([(image_data, "image.png", mime_type)])
+        image_files = [(image_data, "image.png", mime_type)]
+        images = encode_images(image_files)
     else:
+        image_files = None
         images = None
     image_outputs = stream_image_outputs_with_pool(ConversationRequest(
         prompt=prompt,
@@ -205,6 +207,7 @@ def response_events(body: dict[str, Any]) -> Iterator[dict[str, Any]]:
         size=None if images else "1:1",
         response_format="b64_json",
         images=images,
+        image_files=image_files,
     ))
     yield from stream_image_response(image_outputs, prompt, model)
 

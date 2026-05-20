@@ -31,6 +31,7 @@ def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
         response_format=response_format,
         base_url=base_url,
         images=encoded_images,
+        image_files=list(images),
         message_as_error=True,
     ))
     if body.get("stream"):

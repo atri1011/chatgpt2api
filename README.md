@@ -117,6 +117,23 @@ environment:
 - 支持四种导入方式：本地 CPA JSON 文件导入、远程 CPA 服务器导入、`sub2api` 服务器导入、`access_token` 导入
 - 支持在设置页配置 `sub2api` 服务器，筛选并批量导入其中的 OpenAI OAuth 账号
 
+### NewAPI 生图提供商
+
+设置页支持在 `ChatGPT 官网号池` 和 `NewAPI 号池` 之间切换生图提供商。默认仍使用本项目内置 ChatGPT 官网号池；切换为 NewAPI 后，`/v1/images/generations`、`/v1/images/edits`、图片版 `/v1/chat/completions`、图片版 `/v1/responses` 和在线画图都会转发到 NewAPI。
+
+NewAPI 的上游凭证只读取环境变量，不会写入 `config.json`，前端只展示是否已配置：
+
+```bash
+CHATGPT2API_NEWAPI_BASE_URL=https://newapi.example.com
+CHATGPT2API_NEWAPI_API_KEY=sk-...
+CHATGPT2API_NEWAPI_IMAGE_MODEL=gpt-image-1
+CHATGPT2API_NEWAPI_TIMEOUT_SEC=300
+```
+
+- `CHATGPT2API_NEWAPI_BASE_URL` 可填写站点根地址或 `/v1` 地址。
+- `CHATGPT2API_NEWAPI_IMAGE_MODEL` 留空时默认 `gpt-image-1`；设为 `passthrough` 时会把请求中的 `model` 原样传给 NewAPI。
+- NewAPI 内部的渠道 / Multi-Key 号池调度由 NewAPI 自己负责，本项目只作为 OpenAI 兼容图片请求的上游客户端。
+
 ### 实验性 / 规划中
 
 - `/v1/complete` 文本补全与流式输出已实现，但仍在测试，目前会出现对话重复的问题，请谨慎测试使用

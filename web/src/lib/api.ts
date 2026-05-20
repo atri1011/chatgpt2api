@@ -70,10 +70,20 @@ export type AccountImportPayload = {
 };
 
 export type AccountExportFormat = "json" | "zip";
+export type ImageProvider = "chatgpt_web" | "newapi";
+
+export type NewAPIImageSettings = {
+  base_url_configured: boolean;
+  api_key_configured: boolean;
+  image_model: string;
+  timeout_sec: number;
+};
 
 export type SettingsConfig = {
   proxy: string;
   base_url?: string;
+  image_provider?: ImageProvider;
+  newapi_image?: NewAPIImageSettings;
   global_system_prompt?: string;
   sensitive_words?: string[];
   ai_review?: {

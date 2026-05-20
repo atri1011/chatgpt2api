@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { ImageStorageMode } from "@/lib/api";
+import type { ImageProvider, ImageStorageMode } from "@/lib/api";
 import { testProxy, type ProxyTestResult } from "@/lib/api";
 
 import { useSettingsStore } from "../store";
@@ -26,6 +26,7 @@ export function ConfigCard() {
   const setImageRetentionDays = useSettingsStore((state) => state.setImageRetentionDays);
   const setImagePollTimeoutSecs = useSettingsStore((state) => state.setImagePollTimeoutSecs);
   const setImageAccountConcurrency = useSettingsStore((state) => state.setImageAccountConcurrency);
+  const setImageProvider = useSettingsStore((state) => state.setImageProvider);
   const setAutoRemoveInvalidAccounts = useSettingsStore((state) => state.setAutoRemoveInvalidAccounts);
   const setAutoRemoveRateLimitedAccounts = useSettingsStore((state) => state.setAutoRemoveRateLimitedAccounts);
   const setLogLevel = useSettingsStore((state) => state.setLogLevel);
@@ -73,6 +74,10 @@ export function ConfigCard() {
       </Card>
     );
   }
+
+  const imageProvider: ImageProvider = config?.image_provider === "newapi" ? "newapi" : "chatgpt_web";
+  const newapiImage = config?.newapi_image;
+  const newapiReady = Boolean(newapiImage?.base_url_configured && newapiImage?.api_key_configured);
 
   return (
     <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
@@ -168,6 +173,39 @@ export function ConfigCard() {
               className="h-10 rounded-xl border-stone-200 bg-white"
             />
             <p className="text-xs text-stone-500">限制每个账号同时处理的图片请求数量，默认 3。</p>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm text-stone-700">生图提供商</label>
+            <Select
+              value={imageProvider}
+              onValueChange={(value) => setImageProvider(value as ImageProvider)}
+            >
+              <SelectTrigger className="h-10 rounded-xl border-stone-200 bg-white shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="chatgpt_web">ChatGPT 官网号池</SelectItem>
+                <SelectItem value="newapi">NewAPI 号池</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-stone-500">
+              选择 NewAPI 后，文生图、图生图、图片版 Chat Completions / Responses 和在线画图都会转发到 NewAPI。
+            </p>
+            {imageProvider === "newapi" ? (
+              <div
+                className={`rounded-xl border px-3 py-2 text-xs leading-6 ${
+                  newapiReady
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                NewAPI 环境变量：
+                Base URL {newapiImage?.base_url_configured ? "已配置" : "未配置"}，
+                API Key {newapiImage?.api_key_configured ? "已配置" : "未配置"}，
+                上游模型 {String(newapiImage?.image_model || "gpt-image-1")}，
+                超时 {Number(newapiImage?.timeout_sec || 300)} 秒。
+              </div>
+            ) : null}
           </div>
           <label className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700">
             <Checkbox
