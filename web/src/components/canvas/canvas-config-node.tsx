@@ -34,12 +34,40 @@ import {
 
 type CanvasConfigNodeProps = NodeProps<CanvasConfigNodeType>;
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  idle: { label: "待运行", className: "bg-stone-100 text-stone-500" },
-  queued: { label: "排队中", className: "bg-amber-50 text-amber-600" },
-  running: { label: "生成中", className: "bg-blue-50 text-blue-600" },
-  success: { label: "完成", className: "bg-emerald-50 text-emerald-600" },
-  error: { label: "失败", className: "bg-rose-50 text-rose-600" },
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; dotClass: string; bgClass: string; textClass: string }
+> = {
+  idle: {
+    label: "待运行",
+    dotClass: "bg-stone-400",
+    bgClass: "bg-stone-50 border-stone-200",
+    textClass: "text-stone-600",
+  },
+  queued: {
+    label: "排队中",
+    dotClass: "bg-amber-400 animate-pulse",
+    bgClass: "bg-amber-50 border-amber-100",
+    textClass: "text-amber-700",
+  },
+  running: {
+    label: "生成中",
+    dotClass: "bg-indigo-500 animate-pulse",
+    bgClass: "bg-indigo-50 border-indigo-100",
+    textClass: "text-indigo-700",
+  },
+  success: {
+    label: "完成",
+    dotClass: "bg-emerald-500",
+    bgClass: "bg-emerald-50 border-emerald-100",
+    textClass: "text-emerald-700",
+  },
+  error: {
+    label: "失败",
+    dotClass: "bg-rose-500",
+    bgClass: "bg-rose-50 border-rose-100",
+    textClass: "text-rose-700",
+  },
 };
 
 export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) {
@@ -54,14 +82,10 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
   const referenceCount = upstreamStats.referenceCount;
   const stats = { promptCount, referenceCount };
 
-  const badge = STATUS_BADGE[data.status] ?? STATUS_BADGE.idle;
   const isRunning = data.status === "running" || data.status === "queued";
 
   const handleModeChange = (mode: CanvasGenerationMode) => {
-    if (mode === "text") {
-      // Text mode is intentionally disabled — see ENHANCE-CANVAS plan.
-      return;
-    }
+    if (mode === "text") return; // disabled per Phase C scope B
     ctx.onChangeConfigData(id, { generationMode: mode });
   };
 
@@ -72,27 +96,29 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
   return (
     <div
       className={cn(
-        "relative flex w-[320px] flex-col rounded-3xl border bg-stone-950 text-stone-100 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.6)]",
-        selected ? "border-stone-500" : "border-stone-800",
+        "relative flex w-[320px] flex-col rounded-3xl border border-l-4 border-l-indigo-500 bg-white/95 shadow-[0_12px_40px_-20px_rgba(28,25,23,0.15)] backdrop-blur-md transition-all duration-200",
+        selected
+          ? "border-indigo-500 ring-2 ring-indigo-500/10 shadow-[0_12px_40px_-15px_rgba(99,102,241,0.25)]"
+          : "border-stone-200/85",
       )}
     >
       <NodeResizer
         minWidth={300}
         minHeight={260}
         isVisible={selected}
-        lineClassName="!border-stone-600"
-        handleClassName="!h-2 !w-2 !rounded-full !border-stone-600 !bg-stone-900"
+        lineClassName="!border-indigo-500/40"
+        handleClassName="!h-2 !w-2 !rounded-full !border-indigo-500 !bg-white"
       />
 
       <Handle
         type="target"
         position={Position.Left}
-        className="!z-10 !h-3 !w-3 !rounded-full !border-stone-500 !bg-stone-800"
+        className="!z-10 !h-2.5 !w-2.5 !rounded-full !border-2 !border-stone-300 !bg-white transition-all duration-150 hover:!scale-110 hover:!border-indigo-500"
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!z-10 !h-3 !w-3 !rounded-full !border-stone-500 !bg-stone-800"
+        className="!z-10 !h-2.5 !w-2.5 !rounded-full !border-2 !border-stone-300 !bg-white transition-all duration-150 hover:!scale-110 hover:!border-indigo-500"
       />
 
       <div className="flex flex-col gap-3 p-4">
@@ -113,7 +139,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
                   (event.target as HTMLInputElement).blur();
                 }
               }}
-              className="min-w-0 flex-1 rounded-md bg-stone-800 px-2 py-1 text-sm font-semibold text-white outline-none ring-1 ring-stone-700"
+              className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-sm font-semibold text-stone-900 outline-none ring-2 ring-indigo-500/10 focus:border-indigo-500"
             />
           ) : (
             <button
@@ -123,21 +149,21 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
                 setTitleDraft(data.title ?? "");
                 setEditingTitle(true);
               }}
-              className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-white hover:text-stone-300"
+              className="min-w-0 flex-1 truncate text-left text-sm font-bold text-stone-800 transition-colors hover:text-indigo-600"
             >
               {data.title || "生成配置"}
             </button>
           )}
 
-          <div className="flex shrink-0 items-center gap-1 rounded-full bg-stone-800/70 p-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-stone-200/50 bg-stone-100 p-0.5">
             <button
               type="button"
               onClick={() => handleModeChange("image")}
               className={cn(
                 "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition",
                 data.generationMode === "image"
-                  ? "bg-white text-stone-950"
-                  : "text-stone-400 hover:text-stone-200",
+                  ? "border border-stone-200/30 bg-white text-indigo-600 shadow-sm"
+                  : "text-stone-500 hover:text-stone-800",
               )}
             >
               <ImageIcon className="size-3" />
@@ -151,8 +177,8 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               className={cn(
                 "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition",
                 data.generationMode === "text"
-                  ? "bg-white text-stone-950"
-                  : "text-stone-500 opacity-50",
+                  ? "border border-stone-200/30 bg-white text-indigo-600 shadow-sm"
+                  : "text-stone-400 opacity-50",
               )}
             >
               <TypeIcon className="size-3" />
@@ -166,7 +192,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               event.stopPropagation();
               ctx.onDelete(id);
             }}
-            className="shrink-0 rounded-full p-1 text-stone-400 hover:bg-stone-800 hover:text-rose-400"
+            className="shrink-0 rounded-full p-1 text-stone-400 transition-colors hover:bg-stone-100 hover:text-rose-500"
             aria-label="删除节点"
           >
             <X className="size-3.5" />
@@ -180,11 +206,11 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               event.stopPropagation();
               setShowPrompt((v) => !v);
             }}
-            className="inline-flex items-center gap-1 rounded-full bg-stone-800 px-2.5 py-1 text-[11px] font-medium text-stone-200 hover:bg-stone-700"
+            className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900"
           >
             提示词 {stats.promptCount} 个
           </button>
-          <span className="inline-flex items-center gap-1 rounded-full bg-stone-800 px-2.5 py-1 text-[11px] font-medium text-stone-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] font-medium text-stone-600">
             参考图 {stats.referenceCount} 张
           </span>
           <button
@@ -193,19 +219,26 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               event.stopPropagation();
               ctx.onOpenPreview(id);
             }}
-            className="inline-flex items-center gap-1 rounded-full bg-stone-800 px-2.5 py-1 text-[11px] font-medium text-stone-300 hover:bg-stone-700"
+            className="inline-flex items-center gap-1 rounded-full border border-indigo-100 bg-indigo-50/70 px-2.5 py-1 text-[11px] font-medium text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
           >
             <Eye className="size-3" />
             预览
           </button>
-          <span
-            className={cn(
-              "ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium",
-              badge.className,
-            )}
-          >
-            {badge.label}
-          </span>
+          {(() => {
+            const cfg = STATUS_CONFIG[data.status] ?? STATUS_CONFIG.idle;
+            return (
+              <span
+                className={cn(
+                  "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors duration-150",
+                  cfg.bgClass,
+                  cfg.textClass,
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cfg.dotClass)} />
+                {cfg.label}
+              </span>
+            );
+          })()}
         </div>
 
         {showPrompt ? (
@@ -216,7 +249,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             }
             placeholder="本节点提示词（与上游文本节点拼合后作为最终提示词）..."
             rows={3}
-            className="resize-none rounded-2xl border-stone-700 bg-stone-900 px-3 py-2 text-[12px] leading-relaxed text-stone-100 placeholder:text-stone-500 focus-visible:ring-stone-600"
+            className="resize-none rounded-2xl border-stone-200 bg-stone-50 px-3 py-2 text-[12px] leading-relaxed text-stone-800 placeholder:text-stone-400 transition-all focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
           />
         ) : null}
 
@@ -227,12 +260,16 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               ctx.onChangeConfigData(id, { model: value as typeof currentModel })
             }
           >
-            <SelectTrigger className="h-9 rounded-2xl border-stone-700 bg-stone-900 px-3 text-[12px] text-stone-100 shadow-none focus-visible:ring-stone-600">
+            <SelectTrigger className="h-9 rounded-2xl border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
               <SelectValue placeholder="模型" />
             </SelectTrigger>
-            <SelectContent className="rounded-2xl">
+            <SelectContent className="rounded-2xl border-stone-200 bg-white">
               {IMAGE_MODEL_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-[12px]">
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="text-[12px] text-stone-700 focus:bg-stone-50 focus:text-stone-900"
+                >
                   {option.label}
                 </SelectItem>
               ))}
@@ -243,12 +280,16 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             value={currentSize}
             onValueChange={(value) => ctx.onChangeConfigData(id, { size: value })}
           >
-            <SelectTrigger className="h-9 rounded-2xl border-stone-700 bg-stone-900 px-3 text-[12px] text-stone-100 shadow-none focus-visible:ring-stone-600">
+            <SelectTrigger className="h-9 rounded-2xl border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
               <SelectValue placeholder="比例" />
             </SelectTrigger>
-            <SelectContent className="rounded-2xl">
+            <SelectContent className="rounded-2xl border-stone-200 bg-white">
               {sizeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-[12px]">
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="text-[12px] text-stone-700 focus:bg-stone-50 focus:text-stone-900"
+                >
                   {option.label}
                 </SelectItem>
               ))}
@@ -267,7 +308,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
                 count: Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.floor(next))),
               });
             }}
-            className="h-9 rounded-2xl border border-stone-700 bg-stone-900 px-3 text-center text-[12px] font-semibold text-stone-100 outline-none focus-visible:ring-1 focus-visible:ring-stone-600"
+            className="h-9 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-center text-[12px] font-semibold text-stone-700 outline-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
           />
         </div>
 
@@ -278,7 +319,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             ctx.onRunConfig(id);
           }}
           disabled={isRunning}
-          className="h-10 w-full rounded-2xl bg-white text-[13px] font-semibold text-stone-950 hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-10 w-full rounded-2xl bg-indigo-600 text-[13px] font-semibold text-white shadow-sm shadow-indigo-500/10 transition-all duration-150 hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-500/15 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRunning ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -295,7 +336,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
         </Button>
 
         {data.error && data.status === "error" ? (
-          <div className="rounded-xl bg-rose-950/50 px-3 py-2 text-[11px] text-rose-300">
+          <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[11px] font-medium text-rose-600">
             {data.error}
           </div>
         ) : null}

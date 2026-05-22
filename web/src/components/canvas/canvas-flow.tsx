@@ -344,7 +344,7 @@ function CanvasFlowInner() {
 
   return (
     <CanvasNodeContext.Provider value={contextValue}>
-      <div className="relative h-full w-full">
+      <div className="relative h-full w-full bg-stone-50 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.04),transparent_65%)]">
         <ReactFlow
           nodes={store.nodes}
           edges={store.edges}
@@ -361,7 +361,7 @@ function CanvasFlowInner() {
           deleteKeyCode={["Backspace", "Delete"]}
           proOptions={{ hideAttribution: true }}
         >
-          <Background gap={20} color="#e7e5e4" />
+          <Background gap={24} color="#e5e5e7" size={1} />
           <Controls position="bottom-right" />
         </ReactFlow>
 
@@ -380,12 +380,18 @@ function CanvasFlowInner() {
 
         {store.isLoaded && store.nodes.length === 0 ? (
           <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
-            <div className="rounded-3xl bg-white/70 px-6 py-4 text-center text-sm text-stone-500 ring-1 ring-stone-200 backdrop-blur">
-              点击「+ 提示词」开始，添加「+ 配置」节点驱动生成
-              <br />
-              <span className="text-xs text-stone-400">
-                Config 上游可接提示词节点、图片节点，一次出 N 张
-              </span>
+            <div className="max-w-sm rounded-3xl bg-white/80 px-8 py-6 text-center text-sm text-stone-600 shadow-[0_12px_40px_-20px_rgba(28,25,23,0.15)] ring-1 ring-stone-200/60 backdrop-blur-md">
+              <div className="mb-1.5 flex items-center justify-center gap-1.5 text-base font-bold text-stone-800">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+                欢迎使用创作画布
+              </div>
+              <p className="text-xs leading-relaxed text-stone-500">
+                点击上方「+ 提示词」开始，添加「+ 配置」节点驱动生成。
+                <br />
+                <span className="mt-1.5 block text-[11px] text-stone-400">
+                  Config 上游可接提示词节点、图片节点，一次出 N 张
+                </span>
+              </p>
             </div>
           </div>
         ) : null}
