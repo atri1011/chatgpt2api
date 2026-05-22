@@ -25,6 +25,8 @@ export type PromptCategory = {
   category: string;
   name: string;
   description?: string;
+  /** Upstream source repo link, when the category mirrors a remote project. */
+  githubUrl?: string;
 };
 
 export type PromptFilter = {

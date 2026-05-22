@@ -6,6 +6,7 @@ import {
   Eye,
   Image as ImageIcon,
   Loader2,
+  Minus,
   Plus,
   RefreshCcw,
   Type as TypeIcon,
@@ -296,20 +297,39 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             </SelectContent>
           </Select>
 
-          <input
-            type="number"
-            min={MIN_COUNT}
-            max={MAX_COUNT}
-            value={data.count}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              if (!Number.isFinite(next)) return;
-              ctx.onChangeConfigData(id, {
-                count: Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.floor(next))),
-              });
-            }}
-            className="h-9 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-center text-[12px] font-semibold text-stone-700 outline-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
-          />
+          <div className="flex h-9 items-center justify-between gap-1 rounded-2xl border border-stone-200 bg-stone-50 px-1.5 text-[12px] font-semibold text-stone-700">
+            <button
+              type="button"
+              aria-label="减少数量"
+              disabled={data.count <= MIN_COUNT}
+              onClick={(event) => {
+                event.stopPropagation();
+                ctx.onChangeConfigData(id, {
+                  count: Math.max(MIN_COUNT, data.count - 1),
+                });
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[1.5rem] select-none text-center tabular-nums">
+              {data.count}
+            </span>
+            <button
+              type="button"
+              aria-label="增加数量"
+              disabled={data.count >= MAX_COUNT}
+              onClick={(event) => {
+                event.stopPropagation();
+                ctx.onChangeConfigData(id, {
+                  count: Math.min(MAX_COUNT, data.count + 1),
+                });
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-200/70 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
         </div>
 
         <Button
