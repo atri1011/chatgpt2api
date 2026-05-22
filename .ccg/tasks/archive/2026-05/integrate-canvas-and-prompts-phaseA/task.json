@@ -1,0 +1,23 @@
+{
+  "id": "integrate-canvas-and-prompts",
+  "title": "逐步演进式融合 infinite-canvas 的画布功能与预设提示词到 chatgpt2api",
+  "status": "in_progress",
+  "strategy": "guided-develop",
+  "currentPhase": "6-verify",
+  "nextAction": "Phase 6 - 用户本地验证：bun run dev / bun run build",
+  "gate": null,
+  "branch": "main",
+  "scope": "integrate-canvas-and-prompts",
+  "createdAt": "2026-05-22T00:55:13Z",
+  "phases": {
+    "phase1_prompts": "前端 Prompt 库（本地存储 + UI 组件）",
+    "phase2_canvas_mvp": "画布 MVP（节点拖拽 + 连线 + 缩放）",
+    "phase3_canvas_full": "完整画布编排（minimap / undo-redo / import-export / 节点助手）"
+  },
+  "decisions": {
+    "scope": "逐步演进（A→B→C 三阶段）",
+    "storage": "本地存储（localforage），不引入后端",
+    "uiLib": "可引入 Ant Design",
+    "license": "开源，AGPL 兼容"
+  }
+}

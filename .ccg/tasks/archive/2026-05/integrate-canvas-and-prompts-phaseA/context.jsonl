@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"path\", \"reason\": \"why\"}. Seed rows are skipped."}
+{"file": "web/package.json", "reason": "前端依赖现状：Radix UI + Tailwind 4 + Zustand + localforage，需评估引入 antd 的兼容性"}
+{"file": "web/src/", "reason": "前端源码结构：app/components/constants/lib/store，融合需新增 canvas 和 prompts 模块"}
+{"file": "README.md", "reason": "当前项目定位：ChatGPT 逆向图片 API，前端含在线画图工作台，融合点在于扩展工作台为画布形态"}
+{"file": "https://github.com/basketikun/infinite-canvas", "reason": "源项目 — 同作者 basketikun 的 AGPL-3.0 项目，含画布编排 + 几百条图片 prompt"}

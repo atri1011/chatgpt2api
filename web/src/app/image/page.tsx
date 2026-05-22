@@ -8,6 +8,7 @@ import { ImageComposer } from "@/app/image/components/image-composer";
 import { ImageResults, type ImageLightboxItem } from "@/app/image/components/image-results";
 import { ImageSidebar } from "@/app/image/components/image-sidebar";
 import { ImageLightbox } from "@/components/image-lightbox";
+import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import {
   Dialog,
   DialogContent,
@@ -348,6 +349,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const [imageCount, setImageCount] = useState("1");
   const [imageSize, setImageSize] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
   const [referenceImageFiles, setReferenceImageFiles] = useState<File[]>([]);
   const [referenceImages, setReferenceImages] = useState<StoredReferenceImage[]>([]);
   const [conversations, setConversations] = useState<ImageConversation[]>([]);
@@ -402,6 +404,36 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const incoming = params.get("prompt");
+    if (incoming) {
+      setImagePrompt(incoming);
+      params.delete("prompt");
+      const nextSearch = params.toString();
+      const cleanUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", cleanUrl);
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+  }, []);
+
+  const handleApplyPromptFromLibrary = useCallback(
+    (text: string, mode: "replace" | "append") => {
+      setImagePrompt((current) => {
+        const trimmedCurrent = current.trim();
+        if (mode === "append" && trimmedCurrent.length > 0) {
+          return `${current.replace(/\s+$/u, "")}\n${text}`;
+        }
+        return text;
+      });
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1236,6 +1268,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             onPickReferenceImage={() => fileInputRef.current?.click()}
             onReferenceImageChange={handleReferenceImageChange}
             onRemoveReferenceImage={handleRemoveReferenceImage}
+            onOpenPromptLibrary={() => setIsPromptLibraryOpen(true)}
           />
         </div>
       </section>
@@ -1246,6 +1279,13 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
         onIndexChange={setLightboxIndex}
+      />
+
+      <PromptSelectDialog
+        open={isPromptLibraryOpen}
+        onOpenChange={setIsPromptLibraryOpen}
+        onApply={handleApplyPromptFromLibrary}
+        hasExistingInput={imagePrompt.trim().length > 0}
       />
 
       {deleteConfirm ? (
