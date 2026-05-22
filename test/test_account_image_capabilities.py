@@ -9,6 +9,7 @@ os.environ.setdefault("CHATGPT2API_AUTH_KEY", "test-auth")
 
 from services.account_service import AccountService
 from services.auth_service import AuthService
+from services.openai_backend_api import InvalidAccessTokenError, OpenAIBackendAPI
 from services.storage.json_storage import JSONStorageBackend
 from utils.helper import anonymize_token
 
@@ -74,6 +75,47 @@ class TokenLogTests(unittest.TestCase):
 
         self.assertTrue(token_ref.startswith("token:"))
         self.assertNotIn(token, token_ref)
+
+
+class BackendUserInfoRequestTests(unittest.TestCase):
+    def test_backend_user_info_error_includes_step_and_path(self) -> None:
+        api = OpenAIBackendAPI.__new__(OpenAIBackendAPI)
+        api.base_url = "https://chatgpt.com"
+        api.session = FakeBackendSession(status_code=403, payload={"detail": "blocked"})
+
+        with self.assertRaisesRegex(RuntimeError, "me /backend-api/me failed: HTTP 403"):
+            api._get_me()
+
+    def test_backend_user_info_401_raises_invalid_token(self) -> None:
+        api = OpenAIBackendAPI.__new__(OpenAIBackendAPI)
+        api.base_url = "https://chatgpt.com"
+        api.session = FakeBackendSession(status_code=401, payload={"detail": "expired"})
+
+        with self.assertRaisesRegex(InvalidAccessTokenError, "me /backend-api/me failed: HTTP 401"):
+            api._get_me()
+
+
+class FakeBackendResponse:
+    def __init__(self, status_code: int, payload: dict) -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.text = str(payload)
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class FakeBackendSession:
+    def __init__(self, status_code: int, payload: dict) -> None:
+        self.status_code = status_code
+        self.payload = payload
+        self.headers: dict[str, str] = {}
+
+    def get(self, *_args, **_kwargs) -> FakeBackendResponse:
+        return FakeBackendResponse(self.status_code, self.payload)
+
+    def post(self, *_args, **_kwargs) -> FakeBackendResponse:
+        return FakeBackendResponse(self.status_code, self.payload)
 
 
 class AuthServiceTests(unittest.TestCase):

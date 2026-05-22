@@ -1,0 +1,6 @@
+{"_example": "Seed rows are skipped."}
+{"file": "web/src/lib/api.ts", "reason": "createImageGenerationTask / createImageEditTask / fetchImageTasks — 画布节点 run 时调用"}
+{"file": "web/src/app/image/page.tsx", "reason": "runConversationQueue 是 Phase A 已验证的任务轮询模式，画布节点 run 复用其架构"}
+{"file": "web/src/store/image-conversations.ts", "reason": "localforage 持久化模式参考（写队列 + normalize + 多键 store）"}
+{"file": "web/src/types/prompt.ts", "reason": "Phase A 已建立的类型组织约定"}
+{"file": "https://reactflow.dev/api-reference", "reason": "@xyflow/react v12 API — 节点/边/视口/Provider"}

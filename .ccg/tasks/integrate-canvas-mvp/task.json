@@ -1,0 +1,19 @@
+{
+  "id": "integrate-canvas-mvp",
+  "title": "Phase B - 画布 MVP：React Flow 节点编排 + 上游图引用注入",
+  "status": "in_progress",
+  "strategy": "guided-develop",
+  "currentPhase": "6-verify",
+  "nextAction": "Phase 6 - 用户本地验证：bun install + bun run dev / bun run build",
+  "gate": null,
+  "branch": "main",
+  "scope": "integrate-canvas-mvp",
+  "createdAt": "2026-05-22T04:38:12Z",
+  "predecessors": [".ccg/tasks/archive/2026-05/integrate-canvas-and-prompts-phaseA"],
+  "decisions": {
+    "scope": "MVP - 单画布 + 图片节点 + 拖拽连线缩放 + 上游图作引用",
+    "techStack": "@xyflow/react (React Flow)",
+    "edgeSemantics": "上游节点图自动作为参考图喂入（语义化连线）",
+    "phaseAIntegration": "本期独立，不动 Phase A 提示词库"
+  }
+}

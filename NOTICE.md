@@ -23,6 +23,14 @@ web/src/components/prompts/prompt-detail-dialog.tsx
 web/src/components/prompts/prompt-select-dialog.tsx
 web/src/components/prompts/prompt-filter-bar.tsx
 web/src/app/prompts/page.tsx
+web/src/types/canvas.ts
+web/src/store/canvas.ts
+web/src/lib/canvas-runner.ts
+web/src/components/canvas/canvas-image-node.tsx
+web/src/components/canvas/canvas-node-context.ts
+web/src/components/canvas/canvas-toolbar.tsx
+web/src/components/canvas/canvas-flow.tsx
+web/src/app/canvas/page.tsx
 ```
 
 The seed prompt dataset (`web/src/data/prompts/seed.json`) is a freshly authored

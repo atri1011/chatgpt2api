@@ -5,7 +5,6 @@ from pathlib import Path
 
 from services.storage.base import StorageBackend
 from services.storage.database_storage import DatabaseStorageBackend
-from services.storage.git_storage import GitStorageBackend
 from services.storage.json_storage import JSONStorageBackend
 
 
@@ -46,6 +45,8 @@ def create_storage_backend(data_dir: Path) -> StorageBackend:
         return DatabaseStorageBackend(database_url)
     
     elif backend_type == "git":
+        from services.storage.git_storage import GitStorageBackend
+
         # Git 仓库存储
         repo_url = os.getenv("GIT_REPO_URL", "").strip()
         token = os.getenv("GIT_TOKEN", "").strip()

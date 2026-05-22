@@ -1,9 +1,11 @@
 import base64
 import json
 import unittest
+from unittest import mock
 from typing import Any
 
 from services.account_service import AccountService
+from services.openai_backend_api import InvalidAccessTokenError
 
 
 class MemoryStorage:
@@ -112,6 +114,53 @@ class AccountExportTests(unittest.TestCase):
         self.assertEqual(account["export_type"], "codex")
         self.assertEqual(account["refresh_token"], "rt_test")
         self.assertEqual(account["account_id"], "acct_123")
+
+    def test_fetch_remote_info_refreshes_oauth_token_after_401(self) -> None:
+        service = AccountService(
+            MemoryStorage(
+                [
+                    {
+                        "access_token": "old_access",
+                        "refresh_token": "rt_old",
+                        "id_token": "id_old",
+                    }
+                ]
+            )
+        )
+
+        class FakeBackend:
+            def __init__(self, access_token: str) -> None:
+                self.access_token = access_token
+
+            def get_user_info(self) -> dict[str, Any]:
+                if self.access_token == "old_access":
+                    raise InvalidAccessTokenError("/backend-api/me failed: HTTP 401")
+                return {
+                    "email": "refreshed@example.com",
+                    "type": "Plus",
+                    "quota": 3,
+                }
+
+        with (
+            mock.patch.object(
+                AccountService,
+                "_exchange_refresh_token",
+                return_value={
+                    "access_token": "new_access",
+                    "refresh_token": "rt_new",
+                    "id_token": "id_new",
+                },
+            ),
+            mock.patch("services.openai_backend_api.OpenAIBackendAPI", FakeBackend),
+        ):
+            account = service.fetch_remote_info("old_access")
+
+        self.assertIsNone(service.get_account("old_access"))
+        self.assertIsNotNone(service.get_account("new_access"))
+        self.assertEqual(account["access_token"], "new_access")
+        self.assertEqual(account["refresh_token"], "rt_new")
+        self.assertEqual(account["id_token"], "id_new")
+        self.assertEqual(account["email"], "refreshed@example.com")
 
 
 if __name__ == "__main__":

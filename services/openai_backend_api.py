@@ -43,6 +43,7 @@ DEFAULT_CLIENT_VERSION = "prod-be885abbfcfe7b1f511e88b3003d9ee44757fbad"
 DEFAULT_CLIENT_BUILD_NUMBER = "5955942"
 DEFAULT_POW_SCRIPT = "https://chatgpt.com/backend-api/sentinel/sdk.js"
 CODEX_IMAGE_MODEL = "codex-gpt-image-2"
+BACKEND_USER_INFO_TIMEOUT_SEC = 20
 
 
 class OpenAIBackendAPI:
@@ -152,43 +153,96 @@ class OpenAIBackendAPI:
                 return int(item.get("remaining") or 0), str(item.get("reset_after") or "") or None, False
         return 0, None, True
 
+    def _request_backend_json(
+            self,
+            *,
+            step: str,
+            method: str,
+            path: str,
+            route: str | None = None,
+            json_body: dict[str, Any] | None = None,
+            timeout: int = BACKEND_USER_INFO_TIMEOUT_SEC,
+    ) -> Dict[str, Any]:
+        target_route = route or path
+        headers = self._headers(target_route)
+        if json_body is not None:
+            headers["Content-Type"] = "application/json"
+
+        started = time.time()
+        logger.debug({"event": "backend_user_info_request_start", "step": step, "path": path})
+        try:
+            if method.upper() == "POST":
+                response = self.session.post(
+                    self.base_url + path,
+                    headers=headers,
+                    json=json_body,
+                    timeout=timeout,
+                )
+            else:
+                response = self.session.get(
+                    self.base_url + path,
+                    headers=headers,
+                    timeout=timeout,
+                )
+        except Exception as exc:
+            logger.debug({
+                "event": "backend_user_info_request_error",
+                "step": step,
+                "path": path,
+                "duration_ms": int((time.time() - started) * 1000),
+                "error": str(exc),
+            })
+            raise RuntimeError(f"{step} {path} request failed: {exc}") from exc
+
+        duration_ms = int((time.time() - started) * 1000)
+        if response.status_code != 200:
+            logger.debug({
+                "event": "backend_user_info_request_error",
+                "step": step,
+                "path": path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "body": response.text[:500],
+            })
+            if response.status_code == 401:
+                raise InvalidAccessTokenError(f"{step} {path} failed: HTTP {response.status_code}")
+            raise RuntimeError(f"{step} {path} failed: HTTP {response.status_code}")
+
+        logger.debug({
+            "event": "backend_user_info_request_success",
+            "step": step,
+            "path": path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        })
+        return response.json()
+
     def _get_me(self) -> Dict[str, Any]:
         path = "/backend-api/me"
-        response = self.session.get(self.base_url + path, headers=self._headers(path), timeout=20)
-        if response.status_code != 200:
-            if response.status_code == 401:
-                raise InvalidAccessTokenError(f"{path} failed: HTTP {response.status_code}")
-            raise RuntimeError(f"{path} failed: HTTP {response.status_code}")
-        return response.json()
+        return self._request_backend_json(step="me", method="GET", path=path)
 
     def _get_conversation_init(self) -> Dict[str, Any]:
         path = "/backend-api/conversation/init"
-        response = self.session.post(
-            self.base_url + path,
-            headers=self._headers(path, {"Content-Type": "application/json"}),
-            json={
+        return self._request_backend_json(
+            step="conversation_init",
+            method="POST",
+            path=path,
+            json_body={
                 "gizmo_id": None,
                 "requested_default_model": None,
                 "conversation_id": None,
                 "timezone_offset_min": -480,
             },
-            timeout=20,
         )
-        if response.status_code != 200:
-            if response.status_code == 401:
-                raise InvalidAccessTokenError(f"{path} failed: HTTP {response.status_code}")
-            raise RuntimeError(f"{path} failed: HTTP {response.status_code}")
-        return response.json()
 
     def _get_default_account(self) -> Dict[str, Any]:
         route = "/backend-api/accounts/check/v4-2023-04-27"
-        response = self.session.get(self.base_url + route + "?timezone_offset_min=-480", headers=self._headers(route),
-                                    timeout=20)
-        if response.status_code != 200:
-            if response.status_code == 401:
-                raise InvalidAccessTokenError(f"{route} failed: HTTP {response.status_code}")
-            raise RuntimeError(f"/backend-api/accounts/check failed: HTTP {response.status_code}")
-        payload = response.json()
+        payload = self._request_backend_json(
+            step="account_check",
+            method="GET",
+            path=route + "?timezone_offset_min=-480",
+            route=route,
+        )
         logger.debug({"event": "backend_user_info_account_payload", "account_payload": payload})
         return ((payload.get("accounts") or {}).get("default") or {}).get("account") or {}
 

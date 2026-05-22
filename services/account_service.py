@@ -7,16 +7,21 @@ from datetime import datetime, timedelta, timezone
 from threading import Condition, Lock
 from typing import Any
 
+from curl_cffi import requests
+
 from services.config import config
 from services.log_service import (
     LOG_TYPE_ACCOUNT,
     log_service,
 )
+from services.proxy_service import proxy_settings
 from services.storage.base import StorageBackend
 from utils.helper import anonymize_token
 
 
 EXPORT_TIMEZONE = timezone(timedelta(hours=8))
+OPENAI_AUTH_BASE = "https://auth.openai.com"
+OPENAI_PLATFORM_OAUTH_CLIENT_ID = "app_2SKx67EdpoN0G6j64rFvigXD"
 
 
 def _clean_string(value: Any) -> str:
@@ -340,6 +345,64 @@ class AccountService:
             return dict(account)
         return None
 
+    def _replace_account_token(self, old_access_token: str, new_access_token: str, updates: dict) -> dict | None:
+        if not old_access_token or not new_access_token:
+            return None
+        with self._lock:
+            current = self._accounts.get(old_access_token)
+            if current is None:
+                return None
+            next_item = {**current, **updates, "access_token": new_access_token}
+            account = self._normalize_account(next_item)
+            if account is None:
+                return None
+            self._accounts.pop(old_access_token, None)
+            self._image_inflight.pop(old_access_token, None)
+            self._accounts[new_access_token] = account
+            self._save_accounts()
+            log_service.add(LOG_TYPE_ACCOUNT, "刷新 OAuth Token",
+                            {"old_token": anonymize_token(old_access_token), "new_token": anonymize_token(new_access_token)})
+            return dict(account)
+
+    @staticmethod
+    def _exchange_refresh_token(refresh_token: str) -> dict[str, Any]:
+        response = requests.post(
+            f"{OPENAI_AUTH_BASE}/oauth/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "refresh_token",
+                "client_id": OPENAI_PLATFORM_OAUTH_CLIENT_ID,
+                "refresh_token": refresh_token,
+            },
+            timeout=30,
+            **proxy_settings.build_session_kwargs(verify=True),
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"oauth refresh failed: HTTP {response.status_code} {response.text[:200]}")
+        payload = response.json()
+        if not isinstance(payload, dict) or not _clean_string(payload.get("access_token")):
+            raise RuntimeError("oauth refresh failed: missing access_token")
+        return payload
+
+    def refresh_oauth_access_token(self, access_token: str) -> str:
+        with self._lock:
+            current = dict(self._accounts.get(access_token) or {})
+        refresh_token = _clean_string(current.get("refresh_token"))
+        if not refresh_token:
+            raise RuntimeError("missing refresh_token")
+
+        payload = self._exchange_refresh_token(refresh_token)
+        new_access_token = _clean_string(payload.get("access_token"))
+        updates = {
+            "refresh_token": _clean_string(payload.get("refresh_token")) or refresh_token,
+            "id_token": _clean_string(payload.get("id_token")) or _clean_string(current.get("id_token")) or None,
+            "last_refresh": datetime.now(tz=EXPORT_TIMEZONE).isoformat(timespec="seconds"),
+            "status": current.get("status") if current.get("status") != "异常" else "正常",
+        }
+        if self._replace_account_token(access_token, new_access_token, updates) is None:
+            raise RuntimeError("oauth refresh failed: account not found")
+        return new_access_token
+
     def mark_image_result(self, access_token: str, success: bool) -> dict | None:
         if not access_token:
             return None
@@ -382,9 +445,18 @@ class AccountService:
         try:
             from services.openai_backend_api import InvalidAccessTokenError, OpenAIBackendAPI
             result = OpenAIBackendAPI(access_token).get_user_info()
-        except InvalidAccessTokenError:
-            self.remove_invalid_token(access_token, event)
-            raise
+        except InvalidAccessTokenError as original_exc:
+            try:
+                refreshed_access_token = self.refresh_oauth_access_token(access_token)
+            except Exception:
+                self.remove_invalid_token(access_token, event)
+                raise original_exc
+            try:
+                result = OpenAIBackendAPI(refreshed_access_token).get_user_info()
+            except InvalidAccessTokenError:
+                self.remove_invalid_token(refreshed_access_token, event)
+                raise
+            return self.update_account(refreshed_access_token, result)
         return self.update_account(access_token, result)
 
     def refresh_accounts(self, access_tokens: list[str]) -> dict[str, Any]:
