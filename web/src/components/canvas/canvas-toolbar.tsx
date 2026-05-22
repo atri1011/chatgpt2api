@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Plus, Trash2 } from "lucide-react";
+import { ImageIcon, Maximize2, Plus, Settings2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 type CanvasToolbarProps = {
   nodeCount: number;
   selectionCount: number;
-  onAdd: () => void;
+  onAddPrompt: () => void;
+  onAddImage: () => void;
+  onAddConfig: () => void;
   onDeleteSelected: () => void;
   onFitView: () => void;
   onResetAll: () => void;
@@ -18,7 +20,9 @@ type CanvasToolbarProps = {
 export function CanvasToolbar({
   nodeCount,
   selectionCount,
-  onAdd,
+  onAddPrompt,
+  onAddImage,
+  onAddConfig,
   onDeleteSelected,
   onFitView,
   onResetAll,
@@ -35,10 +39,32 @@ export function CanvasToolbar({
         type="button"
         size="sm"
         className="h-8 rounded-full bg-stone-950 px-3 text-xs text-white hover:bg-stone-800"
-        onClick={onAdd}
+        onClick={onAddPrompt}
       >
         <Plus className="size-3.5" />
-        节点
+        提示词
+      </Button>
+
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 rounded-full border-stone-200 bg-white px-3 text-xs text-stone-700 hover:bg-stone-50"
+        onClick={onAddImage}
+      >
+        <ImageIcon className="size-3.5" />
+        图片
+      </Button>
+
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 rounded-full border-stone-200 bg-white px-3 text-xs text-stone-700 hover:bg-stone-50"
+        onClick={onAddConfig}
+      >
+        <Settings2 className="size-3.5" />
+        配置
       </Button>
 
       <Button

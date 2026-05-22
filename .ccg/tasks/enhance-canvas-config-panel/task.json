@@ -1,0 +1,21 @@
+{
+  "id": "enhance-canvas-config-panel",
+  "title": "Phase C - 画布增强：Config 节点 + 多结果批量 + 上游 inputOrder",
+  "status": "in_progress",
+  "strategy": "guided-develop",
+  "currentPhase": "6-verify",
+  "nextAction": "Phase 6 - 用户本地验证：npx next dev 跑通画布交互（添加 Config 节点 → 连上游图 → 开始生成 → 多结果显示）",
+  "gate": null,
+  "branch": "main",
+  "scope": "enhance-canvas-config-panel",
+  "createdAt": "2026-05-22T21:51:30+08:00",
+  "predecessors": [".ccg/tasks/integrate-canvas-mvp"],
+  "decisions": {
+    "reference": "https://github.com/basketikun/infinite-canvas",
+    "textMode": "B - 占位 disabled，仅做生图（后端未确认 /chat/completions）",
+    "nodeTypes": "Image + Config（去掉 Text，保留 generationMode 字段为未来铺路）",
+    "multiResult": "batch root + N children（与上游一致），N 次并发 n=1",
+    "upstreamRefs": "edge 推断 + per-node inputOrder 数组重排",
+    "preview": "Modal 展示上游 prompt + 参考图卡片，支持简单排序"
+  }
+}

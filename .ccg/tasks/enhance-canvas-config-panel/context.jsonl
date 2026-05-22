@@ -1,0 +1,10 @@
+{"_example": "Fill with {\"file\": \"path\", \"reason\": \"why\"}. Seed rows are skipped."}
+{"file": "web/src/types/canvas.ts", "reason": "扩 CanvasNodeKind 与 metadata 字段"}
+{"file": "web/src/store/canvas.ts", "reason": "新增 Config 节点创建 + batch 创建 API"}
+{"file": "web/src/lib/canvas-runner.ts", "reason": "重写为支持 Config 节点 + 多结果批量"}
+{"file": "web/src/components/canvas/canvas-config-node.tsx", "reason": "新增 Config 节点（生成配置面板）"}
+{"file": "web/src/components/canvas/canvas-preview-modal.tsx", "reason": "新增预览/排序 Modal"}
+{"file": "web/src/components/canvas/canvas-flow.tsx", "reason": "注册新 nodeType + 工具栏按钮"}
+{"file": "web/src/components/canvas/canvas-image-node.tsx", "reason": "适配 batch root/child 显示"}
+{"file": "web/src/components/canvas/canvas-toolbar.tsx", "reason": "新增 + 配置节点 按钮"}
+{"file": "web/src/components/canvas/canvas-node-context.ts", "reason": "扩 context 回调"}
