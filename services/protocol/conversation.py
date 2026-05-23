@@ -632,14 +632,27 @@ def _newapi_image_files(request: ConversationRequest) -> list[tuple[bytes, str, 
 def _newapi_upstream_message(exc: UpstreamHTTPError) -> str:
     body = exc.body
     message = ""
+    error_type = ""
+    error_code = ""
     if isinstance(body, dict):
         error = body.get("error")
         if isinstance(error, dict):
             message = str(error.get("message") or "")
+            error_type = str(error.get("type") or "")
+            error_code = str(error.get("code") or "")
         message = message or str(body.get("message") or body.get("error") or "")
     elif body:
         message = str(body)
-    return f"NewAPI image request failed: {message or str(exc)}"
+    parts: list[str] = []
+    if message:
+        parts.append(message)
+    if error_type and error_type not in message:
+        parts.append(f"type={error_type}")
+    if error_code and error_code not in message:
+        parts.append(f"code={error_code}")
+    if not parts:
+        parts.append(str(exc))
+    return f"NewAPI image request failed: status={exc.status_code}, {', '.join(parts)}"
 
 
 def stream_newapi_image_outputs(request: ConversationRequest) -> Iterator[ImageOutput]:
@@ -680,6 +693,15 @@ def stream_newapi_image_outputs(request: ConversationRequest) -> Iterator[ImageO
             code="missing_newapi_config",
         ) from exc
     except UpstreamHTTPError as exc:
+        logger.error({
+            "event": "newapi_image_upstream_error",
+            "status": exc.status_code,
+            "body": exc.body,
+            "model": request.model,
+            "n": request.n,
+            "size": request.size,
+            "has_images": bool(request.images or request.image_files),
+        })
         raise ImageGenerationError(
             _newapi_upstream_message(exc),
             status_code=exc.status_code,
