@@ -30,3 +30,4 @@ docker-compose-local.yml
 git_cache/
 .ace-tool/
 .codex-tasks/
+.ccg/
