@@ -1,6 +1,6 @@
-ARG BUILDPLATFORM
-ARG TARGETPLATFORM
-ARG TARGETARCH
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
+ARG TARGETARCH=amd64
 
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web-build
 
@@ -11,7 +11,8 @@ RUN npm install
 
 COPY VERSION /app/VERSION
 COPY web ./
-RUN NEXT_PUBLIC_APP_VERSION="$(cat /app/VERSION)" npm run build
+RUN NODE_OPTIONS="--max-old-space-size=1536" \
+      NEXT_PUBLIC_APP_VERSION="$(cat /app/VERSION)" npm run build
 
 
 FROM --platform=$TARGETPLATFORM python:3.13-slim AS app
