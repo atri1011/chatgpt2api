@@ -20,6 +20,7 @@ import {
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 90; // ~3 minutes
+const MAX_UPSTREAM_DEPTH = 12; // safety bound for transitive walk
 
 function createClientTaskId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -49,9 +50,13 @@ async function fetchImageAsFile(url: string, fileName: string): Promise<File> {
 }
 
 /**
- * Resolve direct parent nodes for a target, honouring an optional
+ * Resolve **direct** parent nodes for a target, honouring an optional
  * `inputOrder` array on the target's metadata. Nodes not yet wired in
  * `inputOrder` fall through to their edge-insertion order.
+ *
+ * This is the one-hop primitive used by the preview modal for ordering
+ * controls. For run-time resource collection use
+ * {@link collectUpstreamContributions}, which walks transitively.
  */
 export function getOrderedUpstreamNodes(
   targetNodeId: string,
@@ -90,34 +95,163 @@ export function getOrderedUpstreamNodes(
   return ordered;
 }
 
+export type UpstreamTextFragment = {
+  /** Originating node id; for prompt-from-image use the image node id. */
+  nodeId: string;
+  /** Optional label used in the preview modal. */
+  title: string;
+  source: "prompt" | "config" | "image-prompt";
+  text: string;
+};
+
+export type UpstreamContributions = {
+  /** Concrete image nodes (success + data) — terminal content. */
+  imageNodes: CanvasImageNode[];
+  /** Text fragments in collection order. */
+  textFragments: UpstreamTextFragment[];
+};
+
 /**
- * Convert ordered upstream image nodes into File references, skipping
- * non-success entries silently.
+ * Walk transitively upstream from `targetNodeId`, collecting:
+ *
+ * - **Text fragments** from `prompt` nodes, `config` node prompts, and the
+ *   prompt of any image node we visit before terminating on it.
+ * - **Image references** from `image` nodes that have completed successfully
+ *   and carry payload (`url` or `b64_json`). Such nodes are terminal — we
+ *   do **not** recurse past them, because their pixels already encode the
+ *   composition of their upstream.
+ *
+ * Pass-through rules:
+ * - `prompt` nodes contribute their text and pass through (the user uses
+ *   them as in-line annotations between images).
+ * - `config` nodes contribute their text and pass through (chained configs).
+ * - `image` batch roots are placeholders; we expand them to their successful
+ *   `batchChildIds` and stop.
+ * - `image` nodes without payload (queued / running / error) pass through so
+ *   we can find usable references further back.
+ *
+ * Ordering: at every hop we honour `inputOrder` for the directly-connected
+ * children; for transitively-discovered ancestors we use edge-insertion
+ * order. Nodes are de-duplicated.
  */
-async function buildReferenceFiles(
-  ordered: CanvasAnyNode[],
+export function collectUpstreamContributions(
+  targetNodeId: string,
+  nodes: CanvasAnyNode[],
+  edges: CanvasEdge[],
+  inputOrder?: string[],
+): UpstreamContributions {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const visited = new Set<string>();
+  const seenImageIds = new Set<string>();
+  const imageNodes: CanvasImageNode[] = [];
+  const textFragments: UpstreamTextFragment[] = [];
+
+  function pushImage(node: CanvasImageNode) {
+    if (seenImageIds.has(node.id)) return;
+    if (node.data.status !== "success") return;
+    if (!node.data.url && !node.data.b64_json) return;
+    seenImageIds.add(node.id);
+    imageNodes.push(node);
+  }
+
+  function pushText(fragment: UpstreamTextFragment) {
+    if (!fragment.text) return;
+    textFragments.push(fragment);
+  }
+
+  function walk(currentId: string, depth: number) {
+    if (depth > MAX_UPSTREAM_DEPTH) return;
+    if (visited.has(currentId)) return;
+    visited.add(currentId);
+
+    const parents = getOrderedUpstreamNodes(
+      currentId,
+      nodes,
+      edges,
+      currentId === targetNodeId ? inputOrder : undefined,
+    );
+
+    for (const parent of parents) {
+      if (isPromptNode(parent)) {
+        pushText({
+          nodeId: parent.id,
+          title: parent.data.title || "提示词节点",
+          source: "prompt",
+          text: parent.data.prompt?.trim() ?? "",
+        });
+        walk(parent.id, depth + 1);
+        continue;
+      }
+
+      if (isConfigNode(parent)) {
+        pushText({
+          nodeId: parent.id,
+          title: parent.data.title || "配置节点",
+          source: "config",
+          text: parent.data.prompt?.trim() ?? "",
+        });
+        walk(parent.id, depth + 1);
+        continue;
+      }
+
+      if (isImageNode(parent)) {
+        if (parent.data.isBatchRoot) {
+          // Expand the root to its successful children, then stop.
+          for (const childId of parent.data.batchChildIds ?? []) {
+            const child = nodeMap.get(childId);
+            if (child && isImageNode(child)) {
+              pushImage(child);
+            }
+          }
+          continue;
+        }
+
+        if (parent.data.status === "success" && (parent.data.url || parent.data.b64_json)) {
+          pushImage(parent);
+          if (parent.data.prompt?.trim()) {
+            pushText({
+              nodeId: `${parent.id}:prompt`,
+              title: parent.data.title || "图片节点",
+              source: "image-prompt",
+              text: parent.data.prompt.trim(),
+            });
+          }
+          // Terminal — image already encodes upstream context.
+          continue;
+        }
+
+        // Incomplete image: recurse to look for usable references upstream.
+        walk(parent.id, depth + 1);
+      }
+    }
+  }
+
+  walk(targetNodeId, 0);
+  return { imageNodes, textFragments };
+}
+
+/**
+ * Convert collected image nodes into File references. Returns files in the
+ * same order as `imageNodes`; unreachable URLs are skipped silently.
+ */
+async function imageNodesToFiles(
+  imageNodes: CanvasImageNode[],
   ownerId: string,
 ): Promise<File[]> {
   const files: File[] = [];
   let index = 0;
-  for (const upstream of ordered) {
-    if (!isImageNode(upstream)) continue;
-    if (upstream.data.status !== "success") continue;
-    if (upstream.data.isBatchRoot) {
-      // Roots only mirror a child; skip them so we don't duplicate the primary.
-      continue;
-    }
+  for (const node of imageNodes) {
     index += 1;
     const fileName = `upstream-${ownerId}-${index}.png`;
-    if (upstream.data.b64_json) {
+    if (node.data.b64_json) {
       files.push(
-        dataUrlToFile(`data:image/png;base64,${upstream.data.b64_json}`, fileName, "image/png"),
+        dataUrlToFile(`data:image/png;base64,${node.data.b64_json}`, fileName, "image/png"),
       );
       continue;
     }
-    if (upstream.data.url) {
+    if (node.data.url) {
       try {
-        files.push(await fetchImageAsFile(upstream.data.url, fileName));
+        files.push(await fetchImageAsFile(node.data.url, fileName));
       } catch {
         // skip unreachable upstream
       }
@@ -139,8 +273,8 @@ export async function collectUpstreamReferences(
   nodes: CanvasAnyNode[],
   edges: CanvasEdge[],
 ): Promise<File[]> {
-  const ordered = getOrderedUpstreamNodes(targetNodeId, nodes, edges);
-  return buildReferenceFiles(ordered, targetNodeId);
+  const { imageNodes } = collectUpstreamContributions(targetNodeId, nodes, edges);
+  return imageNodesToFiles(imageNodes, targetNodeId);
 }
 
 export async function runNode({ node, references, onUpdate }: RunNodeContext): Promise<void> {
@@ -206,13 +340,13 @@ export type ConfigRunContext = {
 
 /**
  * Run a Config node end-to-end:
- * 1. Resolve ordered upstream → reference files + prompt prefix
+ * 1. Resolve transitive upstream → reference files + combined prompt
  * 2. Submit N independent (count=1) tasks concurrently
  * 3. Patch each child node with its terminal state
  * 4. Mirror first success to the batch root + mark Config status
  */
 export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
-  const { configNode, rootId, childIds, nodes, edges } = ctx;
+  const { configNode, rootId: _rootId, childIds, nodes, edges } = ctx;
   const safeCount = clampCount(configNode.data.count || 1);
   if (childIds.length !== safeCount) {
     ctx.onUpdateConfig("error", "批次占位与张数不一致");
@@ -226,18 +360,15 @@ export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
 
   ctx.onUpdateConfig("running");
 
-  const ordered = getOrderedUpstreamNodes(configNode.id, nodes, edges, configNode.data.inputOrder);
-  const upstreamText = ordered
-    .map((node) => {
-      if (isPromptNode(node)) return node.data.prompt?.trim();
-      if (isConfigNode(node)) return node.data.prompt?.trim();
-      if (isImageNode(node) && !node.data.isBatchRoot) return node.data.prompt?.trim();
-      return undefined;
-    })
-    .filter((text): text is string => Boolean(text && text.length > 0));
+  const { imageNodes, textFragments } = collectUpstreamContributions(
+    configNode.id,
+    nodes,
+    edges,
+    configNode.data.inputOrder,
+  );
 
-  const basePrompt = [configNode.data.prompt?.trim(), ...upstreamText]
-    .filter(Boolean)
+  const basePrompt = [configNode.data.prompt?.trim(), ...textFragments.map((f) => f.text)]
+    .filter((segment): segment is string => Boolean(segment && segment.length > 0))
     .join("\n\n");
 
   if (!basePrompt) {
@@ -254,7 +385,7 @@ export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
 
   let referenceFiles: File[];
   try {
-    referenceFiles = await buildReferenceFiles(ordered, configNode.id);
+    referenceFiles = await imageNodesToFiles(imageNodes, configNode.id);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "读取参考图失败";
     ctx.onUpdateConfig("error", message);
@@ -311,12 +442,7 @@ export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
         applyTaskUpdate(submitted, (updater) => ctx.onUpdateChild(childId, updater));
         await pollUntilTerminal(clientTaskId, (updater) => ctx.onUpdateChild(childId, updater));
 
-        // After polling, the child's status is whatever the last update set.
-        // We cannot read it back here, so we track success via the task tail.
-        // The poll loop sets either success or error via applyTaskUpdate.
-        // For root mirroring, we mark the first success seen.
         if (firstSuccessChildId === null) {
-          // Best-effort: read the latest task — used to gate root preview update.
           const latest = await fetchTaskOnce(clientTaskId);
           if (latest?.status === "success") {
             firstSuccessChildId = childId;

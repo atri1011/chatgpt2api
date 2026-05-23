@@ -12,19 +12,33 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
-  isConfigNode,
-  isImageNode,
-  isPromptNode,
   type CanvasAnyNode,
   type CanvasConfigNode,
   type CanvasEdge,
 } from "@/types/canvas";
-import { getOrderedUpstreamNodes } from "@/lib/canvas-runner";
+import {
+  collectUpstreamContributions,
+  getOrderedUpstreamNodes,
+} from "@/lib/canvas-runner";
 import { cn } from "@/lib/utils";
 
 type PreviewItem =
-  | { kind: "text"; nodeId: string; title: string; text: string }
-  | { kind: "image"; nodeId: string; title: string; src: string; status: string };
+  | {
+      kind: "text";
+      nodeId: string;
+      title: string;
+      text: string;
+      /** True when the contribution originates from a direct parent (reorderable). */
+      reorderable: boolean;
+    }
+  | {
+      kind: "image";
+      nodeId: string;
+      title: string;
+      src: string;
+      status: string;
+      reorderable: boolean;
+    };
 
 type CanvasPreviewModalProps = {
   open: boolean;
@@ -40,59 +54,43 @@ function buildPreviewItems(
   configNode: CanvasConfigNode,
   nodes: CanvasAnyNode[],
   edges: CanvasEdge[],
+  directParentIds: Set<string>,
 ): PreviewItem[] {
-  const ordered = getOrderedUpstreamNodes(
+  const { imageNodes, textFragments } = collectUpstreamContributions(
     configNode.id,
     nodes,
     edges,
     configNode.data.inputOrder,
   );
   const items: PreviewItem[] = [];
-  ordered.forEach((node) => {
-    if (isImageNode(node)) {
-      if (node.data.isBatchRoot) return; // skip batch roots; their children are real
-      const src = node.data.b64_json
-        ? `data:image/png;base64,${node.data.b64_json}`
-        : node.data.url || "";
-      items.push({
-        kind: "image",
-        nodeId: node.id,
-        title: node.data.title || "图片节点",
-        src,
-        status: node.data.status,
-      });
-      if (node.data.prompt?.trim()) {
-        items.push({
-          kind: "text",
-          nodeId: `${node.id}:prompt`,
-          title: `${node.data.title || "图片节点"} · 提示词`,
-          text: node.data.prompt.trim(),
-        });
-      }
-      return;
-    }
-    if (isPromptNode(node)) {
-      if (node.data.prompt?.trim()) {
-        items.push({
-          kind: "text",
-          nodeId: node.id,
-          title: node.data.title || "提示词节点",
-          text: node.data.prompt.trim(),
-        });
-      }
-      return;
-    }
-    if (isConfigNode(node)) {
-      if (node.data.prompt?.trim()) {
-        items.push({
-          kind: "text",
-          nodeId: node.id,
-          title: node.data.title || "配置节点",
-          text: node.data.prompt.trim(),
-        });
-      }
-    }
+
+  imageNodes.forEach((node) => {
+    const src = node.data.b64_json
+      ? `data:image/png;base64,${node.data.b64_json}`
+      : node.data.url || "";
+    items.push({
+      kind: "image",
+      nodeId: node.id,
+      title: node.data.title || "图片节点",
+      src,
+      status: node.data.status,
+      reorderable: directParentIds.has(node.id),
+    });
   });
+
+  textFragments.forEach((fragment) => {
+    // For image-prompt fragments the nodeId is suffixed (":prompt") — strip
+    // the suffix to test reorder eligibility against the real node id.
+    const realId = fragment.nodeId.split(":")[0];
+    items.push({
+      kind: "text",
+      nodeId: fragment.nodeId,
+      title: fragment.title,
+      text: fragment.text,
+      reorderable: directParentIds.has(realId),
+    });
+  });
+
   return items;
 }
 
@@ -127,7 +125,16 @@ export function CanvasPreviewModal({
     );
   }
 
-  const items = buildPreviewItems(configNode, nodes, edges);
+  const directParents = getOrderedUpstreamNodes(
+    configNode.id,
+    nodes,
+    edges,
+    configNode.data.inputOrder,
+  );
+  const directParentIds = new Set(directParents.map((node) => node.id));
+  const orderedSourceIds = directParents.map((node) => node.id);
+
+  const items = buildPreviewItems(configNode, nodes, edges, directParentIds);
   const imageItems = items.filter((item) => item.kind === "image") as Extract<
     PreviewItem,
     { kind: "image" }
@@ -136,13 +143,6 @@ export function CanvasPreviewModal({
     PreviewItem,
     { kind: "text" }
   >[];
-
-  const orderedSourceIds = getOrderedUpstreamNodes(
-    configNode.id,
-    nodes,
-    edges,
-    configNode.data.inputOrder,
-  ).map((node) => node.id);
 
   const handleMove = (sourceNodeId: string, offset: -1 | 1) => {
     onReorder(configNode.id, move(orderedSourceIds, sourceNodeId, offset));
@@ -154,7 +154,7 @@ export function CanvasPreviewModal({
         <DialogHeader>
           <DialogTitle>预览生成输入</DialogTitle>
           <DialogDescription>
-            上游节点按当前顺序拼合：先合并图片为参考图，再把所有文本提示词与本节点提示词拼成最终提示词。
+            上游图片（含跨提示词节点透传发现的）按当前顺序作为参考图，所有文本提示词与本节点提示词拼合为最终提示词。直连父节点可拖动排序。
           </DialogDescription>
         </DialogHeader>
 
@@ -199,26 +199,31 @@ export function CanvasPreviewModal({
                         )}
                       >
                         {item.status === "success" ? "可用" : `状态：${item.status}`}
+                        {item.reorderable ? null : (
+                          <span className="ml-1 text-stone-400">· 透传</span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleMove(item.nodeId, -1)}
-                        className="rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                        aria-label="上移"
-                      >
-                        <ArrowUp className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMove(item.nodeId, 1)}
-                        className="rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                        aria-label="下移"
-                      >
-                        <ArrowDown className="size-3.5" />
-                      </button>
-                    </div>
+                    {item.reorderable ? (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMove(item.nodeId, -1)}
+                          className="rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                          aria-label="上移"
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMove(item.nodeId, 1)}
+                          className="rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+                          aria-label="下移"
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </button>
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -240,8 +245,13 @@ export function CanvasPreviewModal({
                     key={item.nodeId}
                     className="rounded-2xl border border-stone-200 bg-white p-3"
                   >
-                    <div className="truncate text-xs font-medium text-stone-500">
-                      {item.title}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-xs font-medium text-stone-500">
+                        {item.title}
+                      </div>
+                      {item.reorderable ? null : (
+                        <span className="shrink-0 text-[10px] text-stone-400">透传</span>
+                      )}
                     </div>
                     <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-stone-800">
                       {item.text}

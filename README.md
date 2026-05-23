@@ -38,6 +38,265 @@ docker compose up -d
 - API 地址：`http://localhost:3000/v1`
 - 数据目录：`./data`
 
+### VPS 完整部署教程
+
+下面以 Ubuntu / Debian 系 VPS 为例，采用 Docker Compose + Nginx 反向代理 + HTTPS 的部署方式。其他发行版也可以使用，只要先按对应系统安装好 Docker Engine 和 Docker Compose v2 插件。
+
+> Docker 与 Certbot 的安装方式会随系统版本变化，生产环境建议优先参考官方文档：
+>
+> - [Docker Engine Ubuntu 安装文档](https://docs.docker.com/engine/install/ubuntu/)
+> - [Docker Compose 安装文档](https://docs.docker.com/compose/install/)
+> - [Certbot Nginx 安装文档](https://certbot.eff.org/instructions?ws=nginx&os=snap)
+
+#### 1. 准备 VPS 和域名
+
+1. 准备一台可访问公网的 VPS，建议至少 `1C1G`，图片任务较多时建议更高配置。
+2. 准备一个域名，例如 `api.example.com`，在 DNS 服务商处添加 `A` 记录指向 VPS 公网 IP。
+3. 在云厂商安全组 / 防火墙放行 `22`、`80`、`443` 端口。
+4. 不建议直接把容器的 `3000` 端口暴露到公网。生产部署建议只让 Nginx 访问本机 `127.0.0.1:3000`。
+
+#### 2. 安装 Docker、Compose 和 Nginx
+
+如果系统里已经有可用的 `docker compose`，可以跳过 Docker 安装步骤。
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg nginx
+sudo install -m 0755 -d '/etc/apt/keyrings'
+curl -fsSL 'https://download.docker.com/linux/ubuntu/gpg' | sudo tee '/etc/apt/keyrings/docker.asc' > '/dev/null'
+sudo chmod a+r '/etc/apt/keyrings/docker.asc'
+. '/etc/os-release'
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" | sudo tee '/etc/apt/sources.list.d/docker.list' > '/dev/null'
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+docker compose version
+```
+
+Debian 系统把上面仓库地址中的 `linux/ubuntu` 改成 `linux/debian`。如果你的系统不是 Ubuntu / Debian，按 Docker 官方文档安装即可，核心要求是 `docker compose version` 能正常输出版本。
+
+#### 3. 创建部署目录和配置文件
+
+```bash
+sudo mkdir -p '/opt/chatgpt2api/data'
+sudo chown -R "$USER":"$USER" '/opt/chatgpt2api'
+cd '/opt/chatgpt2api'
+openssl rand -hex 32
+```
+
+保存好上一步生成的随机字符串，后面作为 `auth-key` 使用。然后创建 `config.json`：
+
+```bash
+tee 'config.json' > '/dev/null' <<'JSON'
+{
+  "auth-key": "replace-with-your-long-random-auth-key",
+  "refresh_account_interval_minute": 60,
+  "image_retention_days": 15,
+  "image_poll_timeout_secs": 500,
+  "auto_remove_rate_limited_accounts": false,
+  "auto_remove_invalid_accounts": true,
+  "log_levels": [
+    "debug",
+    "error",
+    "info",
+    "warning"
+  ],
+  "proxy": "",
+  "base_url": "https://api.example.com",
+  "sensitive_words": [],
+  "global_system_prompt": "",
+  "ai_review": {
+    "enabled": false,
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "prompt": ""
+  },
+  "backup": {
+    "enabled": false,
+    "provider": "cloudflare_r2",
+    "account_id": "",
+    "access_key_id": "",
+    "secret_access_key": "",
+    "bucket": "",
+    "prefix": "backups",
+    "interval_minutes": 1440,
+    "rotation_keep": 10,
+    "encrypt": false,
+    "passphrase": "",
+    "include": {
+      "config": true,
+      "register": true,
+      "cpa": true,
+      "sub2api": true,
+      "logs": true,
+      "image_tasks": true,
+      "accounts_snapshot": true,
+      "auth_keys_snapshot": true,
+      "images": false
+    }
+  },
+  "image_account_concurrency": 3
+}
+JSON
+chmod 600 'config.json'
+```
+
+把 `replace-with-your-long-random-auth-key` 替换成刚才生成的随机字符串，把 `https://api.example.com` 替换成你的实际域名。`base_url` 用于生成图片结果访问地址，公网部署时不要留成空值。
+
+#### 4. 创建 Docker Compose 文件
+
+注意：下面命令会完整写入 `docker-compose.yml`，请从 `tee` 这一行一直复制到最后的 `YAML` 结束标记。不要只复制中间的 `app:` 片段，否则会缺少最外层 `services:`，运行时就会报 `yaml: line 11: did not find expected key`。
+
+```bash
+tee 'docker-compose.yml' > '/dev/null' <<'YAML'
+services:
+  app:
+    image: ghcr.io/basketikun/chatgpt2api:latest
+    container_name: chatgpt2api
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:80'
+    volumes:
+      - './data:/app/data'
+      - './config.json:/app/config.json'
+    environment:
+      STORAGE_BACKEND: json
+      CHATGPT2API_AUTH_KEY: 'replace-with-your-long-random-auth-key'
+      CHATGPT2API_BASE_URL: 'https://api.example.com'
+      # 可选：使用 NewAPI 作为生图上游时打开下面几行
+      # CHATGPT2API_IMAGE_PROVIDER: 'newapi'
+      # CHATGPT2API_NEWAPI_BASE_URL: 'https://newapi.example.com'
+      # CHATGPT2API_NEWAPI_API_KEY: 'sk-...'
+      # CHATGPT2API_NEWAPI_IMAGE_MODEL: 'gpt-image-1'
+      # CHATGPT2API_NEWAPI_TIMEOUT_SEC: '300'
+YAML
+```
+
+同样把 `replace-with-your-long-random-auth-key` 和 `https://api.example.com` 替换成实际值。这里同时配置 `CHATGPT2API_AUTH_KEY`，用于覆盖 `config.json` 中的 `auth-key`，避免误用默认密钥。
+
+启动前可以先检查 YAML 是否能被 Compose 正确解析：
+
+```bash
+docker compose config
+```
+
+如果你暂时没有域名，只想用 `http://服务器IP:3000` 测试，可以把端口映射改成：
+
+```yaml
+ports:
+  - '3000:80'
+```
+
+这种方式会把服务直接暴露到公网，只建议临时排查使用。
+
+#### 5. 启动服务并本机验证
+
+```bash
+cd '/opt/chatgpt2api'
+docker compose pull
+docker compose up -d
+docker compose ps
+docker logs --tail 100 'chatgpt2api'
+curl -i 'http://127.0.0.1:3000/v1/models' -H 'Authorization: Bearer replace-with-your-long-random-auth-key'
+```
+
+能看到 `200 OK` 或模型列表，说明容器本身已经启动成功。如果这里都不通，先看 `docker logs --tail 200 'chatgpt2api'`，不要急着配 Nginx。
+
+#### 6. 配置 Nginx 反向代理
+
+创建站点配置：
+
+```bash
+sudo tee '/etc/nginx/sites-available/chatgpt2api.conf' > '/dev/null' <<'NGINX'
+server {
+    listen 80;
+    server_name api.example.com;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_buffering off;
+    }
+}
+NGINX
+sudo ln -sf '/etc/nginx/sites-available/chatgpt2api.conf' '/etc/nginx/sites-enabled/chatgpt2api.conf'
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+把 `api.example.com` 换成你的域名。此时可以先访问：
+
+```bash
+curl -i 'http://api.example.com/v1/models' -H 'Authorization: Bearer replace-with-your-long-random-auth-key'
+```
+
+#### 7. 申请 HTTPS 证书
+
+Certbot 官方推荐使用 snap 安装：
+
+```bash
+sudo apt install -y snapd
+sudo snap install core
+sudo snap refresh core
+sudo snap install --classic certbot
+sudo ln -sf '/snap/bin/certbot' '/usr/local/bin/certbot'
+sudo certbot --nginx -d 'api.example.com'
+sudo certbot renew --dry-run
+```
+
+证书签发成功后，访问地址就是：
+
+- Web 面板：`https://api.example.com`
+- OpenAI 兼容 API Base URL：`https://api.example.com/v1`
+- API Key：填写你的 `auth-key`
+
+#### 8. 更新版本
+
+```bash
+cd '/opt/chatgpt2api'
+docker compose pull
+docker compose up -d
+docker image prune -f
+docker logs --tail 100 'chatgpt2api'
+```
+
+#### 9. 备份与恢复
+
+至少备份 `config.json` 和 `data/`。其中 `data/` 包含账号池、授权密钥、图片任务、日志与本地缓存图片等运行数据。
+
+```bash
+cd '/opt'
+sudo tar -czf 'chatgpt2api-backup.tar.gz' 'chatgpt2api/config.json' 'chatgpt2api/data'
+```
+
+恢复时：
+
+```bash
+cd '/opt'
+sudo tar -xzf 'chatgpt2api-backup.tar.gz' -C '/opt'
+cd '/opt/chatgpt2api'
+docker compose up -d
+```
+
+#### 10. 常见问题
+
+| 现象 | 处理方式 |
+|:---|:---|
+| 启动时报 `auth-key 未设置` | 检查 `config.json` 的 `auth-key` 或 `docker-compose.yml` 的 `CHATGPT2API_AUTH_KEY`，不要使用空值或默认值 |
+| Nginx 返回 `502 Bad Gateway` | 先执行 `docker compose ps` 和 `curl -i 'http://127.0.0.1:3000/v1/models' -H 'Authorization: Bearer <auth-key>'`，确认容器本机端口可访问 |
+| 公网图片链接打不开 | 检查 `CHATGPT2API_BASE_URL` 或设置页里的基础地址是否为 `https://你的域名` |
+| 上传图片时报 `413 Request Entity Too Large` | 调大 Nginx 配置里的 `client_max_body_size` |
+| 访问 `服务器IP:3000` 不通 | 如果 Compose 使用 `127.0.0.1:3000:80`，这是正常的；公网入口应走 Nginx 的 `80/443` |
+| 使用云防火墙仍能访问容器端口 | Docker 暴露端口可能绕过部分主机防火墙规则，生产环境优先使用 `127.0.0.1:3000:80` 再由 Nginx 反代 |
+
 ### 本地开发
 
 启动后端：
@@ -61,8 +320,8 @@ bun run dev
 
 ```bash
 docker pull ghcr.io/basketikun/chatgpt2api:latest
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 
 ```
 

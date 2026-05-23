@@ -28,8 +28,8 @@ import { CanvasPreviewModal } from "@/components/canvas/canvas-preview-modal";
 import { CanvasPromptNode } from "@/components/canvas/canvas-prompt-node";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import {
+  collectUpstreamContributions,
   collectUpstreamReferences,
-  getOrderedUpstreamNodes,
   runConfigNode,
   runNode,
 } from "@/lib/canvas-runner";
@@ -212,26 +212,16 @@ function CanvasFlowInner() {
       if (!target || !isConfigNode(target)) {
         return { promptCount: 0, referenceCount: 0 };
       }
-      const ordered = getOrderedUpstreamNodes(
+      const { imageNodes, textFragments } = collectUpstreamContributions(
         nodeId,
         nodesRef.current,
         edgesRef.current,
         target.data.inputOrder,
       );
-      let promptCount = 0;
-      let referenceCount = 0;
-      ordered.forEach((node) => {
-        if (isImageNode(node)) {
-          if (node.data.isBatchRoot) return;
-          if (node.data.status === "success") referenceCount += 1;
-          if (node.data.prompt?.trim()) promptCount += 1;
-        } else if (isPromptNode(node)) {
-          if (node.data.prompt?.trim()) promptCount += 1;
-        } else if (isConfigNode(node)) {
-          if (node.data.prompt?.trim()) promptCount += 1;
-        }
-      });
-      return { promptCount, referenceCount };
+      return {
+        promptCount: textFragments.length,
+        referenceCount: imageNodes.length,
+      };
     },
     [],
   );
