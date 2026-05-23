@@ -10,6 +10,7 @@ web_dist
 .venv
 .idea
 data
+!web/src/data/
 config.json
 edit
 
