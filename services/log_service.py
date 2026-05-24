@@ -180,7 +180,7 @@ class LoggedCall:
     started: float = field(default_factory=time.time)
     request_text: str = ""
 
-    async def run(self, handler, *args, sse: str = "openai"):
+    async def run(self, handler, *args, sse: str = "openai", prefetch_stream: bool = True):
         from services.protocol.conversation import ImageGenerationError
 
         try:
@@ -200,6 +200,8 @@ class LoggedCall:
             return result
 
         sender = anthropic_sse_stream if sse == "anthropic" else sse_json_stream
+        if not prefetch_stream:
+            return StreamingResponse(sender(self.stream(result)), media_type="text/event-stream")
         try:
             has_first, first = await run_in_threadpool(_next_item, result)
         except ImageGenerationError as exc:

@@ -106,6 +106,47 @@ class ConfigLoadingTests(unittest.TestCase):
                     else:
                         module.os.environ[key] = value
 
+    def test_load_dotenv_file_does_not_override_existing_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / ".env"
+            env_file.write_text(
+                "\n".join([
+                    "CHATGPT2API_NEWAPI_BASE_URL=https://newapi.local.test",
+                    "CHATGPT2API_NEWAPI_API_KEY='sk-local'",
+                    "CHATGPT2API_NEWAPI_IMAGE_MODEL=\"gpt-image-2\"",
+                    "CHATGPT2API_NEWAPI_TIMEOUT_SEC=180",
+                    "CHATGPT2API_AUTH_KEY=env-login-key",
+                ]),
+                encoding="utf-8",
+            )
+
+            module = self.config_module
+            keys = [
+                "CHATGPT2API_NEWAPI_BASE_URL",
+                "CHATGPT2API_NEWAPI_API_KEY",
+                "CHATGPT2API_NEWAPI_IMAGE_MODEL",
+                "CHATGPT2API_NEWAPI_TIMEOUT_SEC",
+            ]
+            old_values = {key: module.os.environ.get(key) for key in keys}
+            try:
+                for key in keys:
+                    module.os.environ.pop(key, None)
+                module.os.environ["CHATGPT2API_NEWAPI_TIMEOUT_SEC"] = "300"
+
+                module._load_dotenv_file(env_file)
+
+                self.assertEqual(module.os.environ["CHATGPT2API_NEWAPI_BASE_URL"], "https://newapi.local.test")
+                self.assertEqual(module.os.environ["CHATGPT2API_NEWAPI_API_KEY"], "sk-local")
+                self.assertEqual(module.os.environ["CHATGPT2API_NEWAPI_IMAGE_MODEL"], "gpt-image-2")
+                self.assertEqual(module.os.environ["CHATGPT2API_NEWAPI_TIMEOUT_SEC"], "300")
+                self.assertNotIn("CHATGPT2API_AUTH_KEY", module.os.environ)
+            finally:
+                for key, value in old_values.items():
+                    if value is None:
+                        module.os.environ.pop(key, None)
+                    else:
+                        module.os.environ[key] = value
+
 
 if __name__ == "__main__":
     unittest.main()

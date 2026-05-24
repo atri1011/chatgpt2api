@@ -1,4 +1,6 @@
 import { httpRequest, request } from "@/lib/request";
+import webConfig from "@/constants/common-env";
+import { clearStoredAuthSession, getStoredAuthKey } from "@/store/auth";
 
 export type AccountType = string;
 export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
@@ -212,6 +214,16 @@ export type SystemLog = {
 export type ImageResponse = {
   created: number;
   data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }>;
+  message?: string;
+};
+
+type ImageStreamChunk = {
+  object?: string;
+  created?: number;
+  data?: ImageResponse["data"];
+  message?: string;
+  progress_text?: string;
+  error?: string | { message?: string };
 };
 
 export type ImageTask = {
@@ -370,7 +382,7 @@ export async function updateAccount(
 }
 
 export async function generateImage(prompt: string, model?: ImageModel, size?: string) {
-  return httpRequest<ImageResponse>(
+  return requestImageStream(
     "/v1/images/generations",
     {
       method: "POST",
@@ -380,6 +392,7 @@ export async function generateImage(prompt: string, model?: ImageModel, size?: s
         ...(size ? { size } : {}),
         n: 1,
         response_format: "b64_json",
+        stream: true,
       },
     },
   );
@@ -400,14 +413,117 @@ export async function editImage(files: File | File[], prompt: string, model?: Im
     formData.append("size", size);
   }
   formData.append("n", "1");
+  formData.append("response_format", "b64_json");
+  formData.append("stream", "true");
 
-  return httpRequest<ImageResponse>(
+  return requestImageStream(
     "/v1/images/edits",
     {
       method: "POST",
       body: formData,
     },
   );
+}
+
+function imageStreamErrorMessage(value: ImageStreamChunk["error"]): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object" && typeof value.message === "string") {
+    return value.message;
+  }
+  return "";
+}
+
+function collectImageStreamChunk(chunk: ImageStreamChunk, result: ImageResponse) {
+  if (chunk.created && !result.created) {
+    result.created = chunk.created;
+  }
+  if (Array.isArray(chunk.data) && chunk.data.length > 0) {
+    result.data.push(...chunk.data);
+  }
+  if (chunk.message && !result.message) {
+    result.message = chunk.message;
+  }
+  const errorMessage = imageStreamErrorMessage(chunk.error);
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
+}
+
+function collectImageStreamEvent(eventText: string, result: ImageResponse): boolean {
+  const dataLines = eventText
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim());
+  if (dataLines.length === 0) {
+    return false;
+  }
+  const payload = dataLines.join("\n");
+  if (payload === "[DONE]") {
+    return true;
+  }
+  collectImageStreamChunk(JSON.parse(payload) as ImageStreamChunk, result);
+  return false;
+}
+
+async function requestImageStream(path: string, options: { method: string; body: unknown }) {
+  const authKey = await getStoredAuthKey();
+  const headers: Record<string, string> = {};
+  let body: BodyInit;
+  if (options.body instanceof FormData) {
+    body = options.body;
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(options.body);
+  }
+  if (authKey) {
+    headers.Authorization = `Bearer ${authKey}`;
+  }
+
+  const apiBaseUrl = webConfig.apiUrl.replace(/\/$/, "");
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: options.method,
+    headers,
+    body,
+  });
+  if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    await clearStoredAuthSession();
+    window.location.replace("/login");
+    return new Promise<ImageResponse>(() => {});
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `请求失败 (${response.status})`);
+  }
+  if (!response.body) {
+    throw new Error("图片流式响应为空");
+  }
+
+  const result: ImageResponse = { created: 0, data: [] };
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() || "";
+    for (const eventText of events) {
+      if (collectImageStreamEvent(eventText, result)) {
+        return result;
+      }
+    }
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    collectImageStreamEvent(buffer, result);
+  }
+  return result;
 }
 
 export async function createImageGenerationTask(clientTaskId: string, prompt: string, model?: ImageModel, size?: string) {

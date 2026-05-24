@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -9,7 +10,7 @@ from curl_cffi import CurlMime, requests
 
 from services.config import config
 from services.proxy_service import proxy_settings
-from utils.helper import ensure_ok
+from utils.helper import ensure_ok, iter_sse_payloads
 
 
 class NewAPIImageProviderConfigError(ValueError):
@@ -82,6 +83,11 @@ class NewAPIImageProvider:
             headers["Content-Type"] = "application/json"
         return headers
 
+    def _stream_headers(self, *, json_content: bool) -> dict[str, str]:
+        headers = self._headers(json_content=json_content)
+        headers["Accept"] = "text/event-stream"
+        return headers
+
     def _upstream_model(self, request_model: str) -> str:
         configured = config.newapi_image_model
         if configured.lower() == "passthrough":
@@ -102,18 +108,20 @@ class NewAPIImageProvider:
             "prompt": prompt,
             "n": n,
             "response_format": response_format,
+            "stream": True,
         }
         if size:
             payload["size"] = size
         response = requests.post(
             self._api_url("/images/generations"),
-            headers=self._headers(json_content=True),
+            headers=self._stream_headers(json_content=True),
             json=payload,
             timeout=config.newapi_image_timeout_sec,
+            stream=True,
             **proxy_settings.build_session_kwargs(),
         )
         ensure_ok(response, "newapi_images_generations")
-        return self._normalize_response(response.json(), prompt)
+        return self._normalize_stream_or_json_response(response, prompt)
 
     def edit(
         self,
@@ -132,6 +140,7 @@ class NewAPIImageProvider:
             "prompt": prompt,
             "n": str(n),
             "response_format": response_format,
+            "stream": "true",
         }
         if size:
             data["size"] = size
@@ -139,14 +148,15 @@ class NewAPIImageProvider:
         try:
             response = requests.post(
                 self._api_url("/images/edits"),
-                headers=self._headers(json_content=False),
+                headers=self._stream_headers(json_content=False),
                 data=data,
                 multipart=multipart,
                 timeout=config.newapi_image_timeout_sec,
+                stream=True,
                 **proxy_settings.build_session_kwargs(),
             )
             ensure_ok(response, "newapi_images_edits")
-            return self._normalize_response(response.json(), prompt)
+            return self._normalize_stream_or_json_response(response, prompt)
         finally:
             multipart.close()
 
@@ -164,6 +174,37 @@ class NewAPIImageProvider:
         if not response.content:
             raise NewAPIImageProviderResponseError("NewAPI image URL returned empty content")
         return base64.b64encode(response.content).decode("ascii")
+
+    def _normalize_stream_or_json_response(self, response: requests.Response, prompt: str) -> NewAPIImageResult:
+        payload = self._last_stream_payload(response)
+        if payload is None:
+            payload = response.json()
+        return self._normalize_response(payload, prompt)
+
+    def _last_stream_payload(self, response: requests.Response) -> Any | None:
+        content_type = str(response.headers.get("content-type") or "").lower()
+        if "text/event-stream" not in content_type:
+            return None
+        last_payload: Any | None = None
+        for payload in iter_sse_payloads(response):
+            if payload == "[DONE]":
+                break
+            try:
+                item = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(item, dict):
+                continue
+            if item.get("error"):
+                error = item.get("error")
+                if isinstance(error, dict):
+                    message = str(error.get("message") or error)
+                else:
+                    message = str(error)
+                raise NewAPIImageProviderResponseError(message or "NewAPI image stream returned an error")
+            if isinstance(item.get("data"), list):
+                last_payload = item
+        return last_payload
 
     def _normalize_response(self, payload: Any, prompt: str) -> NewAPIImageResult:
         if not isinstance(payload, dict):

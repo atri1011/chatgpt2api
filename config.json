@@ -1,5 +1,5 @@
 {
-  "auth-key": "chatgpt2api",
+  "auth-key": "425735458",
   "refresh_account_interval_minute": 60,
   "image_retention_days": 15,
   "image_poll_timeout_secs": 500,
@@ -25,9 +25,9 @@
   "backup": {
     "enabled": false,
     "provider": "cloudflare_r2",
-    "account_id": "",
+    "account_id": "root",
     "access_key_id": "",
-    "secret_access_key": "",
+    "secret_access_key": "root",
     "bucket": "",
     "prefix": "backups",
     "interval_minutes": 1440,
@@ -46,5 +46,17 @@
       "images": false
     }
   },
-  "image_account_concurrency": 3
+  "image_account_concurrency": 3,
+  "image_poll_interval_secs": 10,
+  "image_poll_initial_wait_secs": 10,
+  "image_provider": "newapi",
+  "image_storage": {
+    "enabled": false,
+    "mode": "local",
+    "webdav_url": "",
+    "webdav_username": "",
+    "webdav_password": "",
+    "webdav_root_path": "chatgpt2api/images",
+    "public_base_url": ""
+  }
 }

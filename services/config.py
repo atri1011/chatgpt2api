@@ -41,6 +41,34 @@ IMAGE_PROVIDER_CHATGPT_WEB = "chatgpt_web"
 IMAGE_PROVIDER_NEWAPI = "newapi"
 IMAGE_PROVIDERS = {IMAGE_PROVIDER_CHATGPT_WEB, IMAGE_PROVIDER_NEWAPI}
 DEFAULT_NEWAPI_IMAGE_MODEL = "gpt-image-1"
+DOTENV_AUTO_LOAD_KEYS = {
+    "CHATGPT2API_BASE_URL",
+    "CHATGPT2API_IMAGE_PROVIDER",
+    "CHATGPT2API_NEWAPI_BASE_URL",
+    "CHATGPT2API_NEWAPI_API_KEY",
+    "CHATGPT2API_NEWAPI_IMAGE_MODEL",
+    "CHATGPT2API_NEWAPI_TIMEOUT_SEC",
+}
+
+
+def _load_dotenv_file(path: Path) -> None:
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key not in DOTENV_AUTO_LOAD_KEYS or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ[key] = value
+
+
+_load_dotenv_file(BASE_DIR / ".env")
 
 
 def _normalize_bool(value: object, default: bool = False) -> bool:

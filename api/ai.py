@@ -85,7 +85,7 @@ def create_router() -> APIRouter:
         payload["base_url"] = resolve_image_base_url(request)
         call = LoggedCall(identity, "/v1/images/generations", body.model, "文生图", request_text=body.prompt)
         await filter_or_log(call, body.prompt)
-        return await call.run(openai_v1_image_generations.handle, payload)
+        return await call.run(openai_v1_image_generations.handle, payload, prefetch_stream=not bool(body.stream))
 
     @router.post("/v1/images/edits")
     async def edit_images(
@@ -100,7 +100,7 @@ def create_router() -> APIRouter:
         await filter_or_log(call, prompt)
         payload["images"] = await read_image_sources(image_sources)
         payload["base_url"] = resolve_image_base_url(request)
-        return await call.run(openai_v1_image_edit.handle, payload)
+        return await call.run(openai_v1_image_edit.handle, payload, prefetch_stream=not bool(payload.get("stream")))
 
     @router.post("/v1/chat/completions")
     async def create_chat_completion(body: ChatCompletionRequest, authorization: str | None = Header(default=None)):
