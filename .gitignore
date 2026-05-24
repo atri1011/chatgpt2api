@@ -32,3 +32,4 @@ git_cache/
 .ace-tool/
 .codex-tasks/
 .ccg/
+.ccg/tasks/enhance-canvas-config-panel/.turns.json
