@@ -17,6 +17,7 @@ from services.protocol.conversation import (
 
 IMAGE_BYTES = b"\x89PNG\r\n\x1a\n"
 IMAGE_B64 = base64.b64encode(IMAGE_BYTES).decode("ascii")
+IMAGE_B64_UNPADDED = IMAGE_B64.rstrip("=")
 
 
 class FakeResponse:
@@ -144,6 +145,22 @@ class NewAPIImageProviderTests(unittest.TestCase):
         self.assertIs(calls[0][1]["json"]["stream"], True)
         self.assertIs(calls[0][1]["stream"], True)
 
+    def test_generation_normalizes_unpadded_b64_json(self):
+        def fake_post(url, **kwargs):
+            return FakeResponse(payload={"created": 789, "data": [{"b64_json": IMAGE_B64_UNPADDED, "revised_prompt": "cat"}]})
+
+        with mock.patch("services.newapi_image_provider.requests.post", side_effect=fake_post):
+            result = collect_image_outputs(stream_image_outputs_with_pool(ConversationRequest(
+                prompt="cat",
+                model="gpt-image-2",
+                n=1,
+                response_format="b64_json",
+            )))
+
+        self.assertEqual(result["created"], 789)
+        self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
+        self.assertEqual(result["data"][0]["url"], "http://local.test/images/newapi.png")
+
     def test_generation_passthrough_model(self):
         os.environ["CHATGPT2API_NEWAPI_IMAGE_MODEL"] = "passthrough"
         calls = []
@@ -219,6 +236,22 @@ class NewAPIImageProviderTests(unittest.TestCase):
 
         self.assertEqual(post_calls[0][0], "https://newapi.example.test/v1/images/generations")
         self.assertEqual(get_calls[0][0], "https://cdn.example.test/out.png")
+        self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
+
+    def test_data_url_response_without_padding_is_normalized(self):
+        data_url = f"data:image/png;base64,{IMAGE_B64_UNPADDED}"
+
+        def fake_post(url, **kwargs):
+            return FakeResponse(payload={"data": [{"url": data_url}]})
+
+        with mock.patch("services.newapi_image_provider.requests.post", side_effect=fake_post):
+            result = collect_image_outputs(stream_image_outputs_with_pool(ConversationRequest(
+                prompt="cat",
+                model="gpt-image-2",
+                n=1,
+                response_format="b64_json",
+            )))
+
         self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
 
     def test_missing_env_returns_openai_style_error(self):

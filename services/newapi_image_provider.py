@@ -10,7 +10,7 @@ from curl_cffi import CurlMime, requests
 
 from services.config import config
 from services.proxy_service import proxy_settings
-from utils.helper import ensure_ok, iter_sse_payloads
+from utils.helper import decode_base64_bytes, ensure_ok, iter_sse_payloads
 
 
 class NewAPIImageProviderConfigError(ValueError):
@@ -36,7 +36,7 @@ def _decode_data_url(value: str) -> bytes:
     if not separator or not header.lower().startswith("data:image/"):
         raise NewAPIImageProviderResponseError("NewAPI returned an invalid image data URL")
     try:
-        return base64.b64decode(payload, validate=";base64" in header.lower())
+        return decode_base64_bytes(value, validate=";base64" in header.lower())
     except Exception as exc:
         raise NewAPIImageProviderResponseError("NewAPI returned invalid base64 image data") from exc
 
@@ -217,6 +217,11 @@ class NewAPIImageProvider:
             if not isinstance(raw_item, dict):
                 continue
             b64_json = _clean(raw_item.get("b64_json"))
+            if b64_json:
+                try:
+                    b64_json = base64.b64encode(decode_base64_bytes(b64_json)).decode("ascii")
+                except Exception as exc:
+                    raise NewAPIImageProviderResponseError("NewAPI returned invalid base64 image data") from exc
             if not b64_json:
                 image_url = _clean(raw_item.get("url"))
                 if image_url:

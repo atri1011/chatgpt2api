@@ -20,6 +20,24 @@ MAX_JSON_EDIT_IMAGES = 10
 DATA_URL_IMAGE_RE = re.compile(r"^data:(?P<mime>[-+./\w]+);base64,(?P<data>.*)$", re.DOTALL)
 
 
+def decode_base64_bytes(value: str, *, validate: bool = False) -> bytes:
+    text = str(value or "").strip()
+    if not text:
+        return b""
+    match = DATA_URL_IMAGE_RE.match(text)
+    if match:
+        text = match.group("data")
+    elif text.startswith("data:") and "," in text:
+        text = text.split(",", 1)[1]
+    normalized = "".join(text.split())
+    if not normalized:
+        return b""
+    padding = (-len(normalized)) % 4
+    if padding:
+        normalized += "=" * padding
+    return base64.b64decode(normalized, altchars=b"-_", validate=validate)
+
+
 def _image_extension(mime_type: str) -> str:
     image_type = mime_type.split("/", 1)[1].split(";", 1)[0].lower() if "/" in mime_type else "png"
     return "jpg" if image_type == "jpeg" else image_type or "png"
@@ -43,7 +61,7 @@ def _decode_json_image_string(value: str, index: int, filename: str | None = Non
     if resolved_mime not in SUPPORTED_JSON_IMAGE_MIME_TYPES:
         raise HTTPException(status_code=400, detail={"error": "unsupported image mime type"})
     try:
-        image_data = base64.b64decode(encoded, validate=True)
+        image_data = decode_base64_bytes(encoded, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail={"error": "invalid base64 image data"}) from exc
     if not image_data:
@@ -211,7 +229,7 @@ def save_images_from_text(text: str, prefix: str) -> list[Path]:
         image_type = header.split(";")[0].removeprefix("data:image/").strip() or "png"
         extension = "jpg" if image_type == "jpeg" else image_type
         output_path = OUTPUT_DIR / f"{prefix}_{timestamp}_{index}.{extension}"
-        output_path.write_bytes(base64.b64decode(encoded))
+        output_path.write_bytes(decode_base64_bytes(encoded))
         saved_paths.append(output_path)
     return saved_paths
 
@@ -297,13 +315,13 @@ def extract_image_from_message_content(content: object) -> list[tuple[bytes, str
             if url.startswith("data:"):
                 header, _, data = url.partition(",")
                 mime = header.split(";")[0].removeprefix("data:")
-                images.append((base64.b64decode(data), mime or "image/png"))
+                images.append((decode_base64_bytes(data), mime or "image/png"))
         elif item_type == "input_image":
             image_url = str(item.get("image_url") or "")
             if image_url.startswith("data:"):
                 header, _, data = image_url.partition(",")
                 mime = header.split(";")[0].removeprefix("data:")
-                images.append((base64.b64decode(data), mime or "image/png"))
+                images.append((decode_base64_bytes(data), mime or "image/png"))
     return images
 
 

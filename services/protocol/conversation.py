@@ -18,7 +18,7 @@ from services.newapi_image_provider import (
     newapi_image_provider,
 )
 from services.openai_backend_api import ImagePollTimeoutError, OpenAIBackendAPI
-from utils.helper import IMAGE_MODELS, UpstreamHTTPError, extract_image_from_message_content
+from utils.helper import IMAGE_MODELS, UpstreamHTTPError, decode_base64_bytes, extract_image_from_message_content
 from utils.log import logger
 
 
@@ -194,16 +194,33 @@ def format_image_result(
         b64_json = str(item.get("b64_json") or "").strip()
         if not b64_json:
             continue
+        try:
+            image_bytes = decode_base64_bytes(b64_json)
+        except Exception as exc:
+            raise ImageGenerationError(
+                "image result contained invalid base64 data",
+                status_code=502,
+                error_type="server_error",
+                code="invalid_image_data",
+            ) from exc
+        if not image_bytes:
+            raise ImageGenerationError(
+                "image result was empty",
+                status_code=502,
+                error_type="server_error",
+                code="invalid_image_data",
+            )
+        normalized_b64 = base64.b64encode(image_bytes).decode("ascii")
         revised_prompt = str(item.get("revised_prompt") or prompt).strip() or prompt
         if response_format == "b64_json":
             data.append({
-                "b64_json": b64_json,
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
+                "b64_json": normalized_b64,
+                "url": save_image_bytes(image_bytes, base_url),
                 "revised_prompt": revised_prompt,
             })
         else:
             data.append({
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
+                "url": save_image_bytes(image_bytes, base_url),
                 "revised_prompt": revised_prompt,
             })
     result: dict[str, Any] = {"created": created or int(time.time()), "data": data}
@@ -621,11 +638,25 @@ def _newapi_image_files(request: ConversationRequest) -> list[tuple[bytes, str, 
     files: list[tuple[bytes, str, str]] = []
     for index, image in enumerate(request.images or [], start=1):
         payload = str(image or "")
-        if payload.startswith("data:") and "," in payload:
-            payload = payload.split(",", 1)[1]
         if not payload:
             continue
-        files.append((base64.b64decode(payload), f"image_{index}.png", "image/png"))
+        try:
+            image_bytes = decode_base64_bytes(payload)
+        except Exception as exc:
+            raise ImageGenerationError(
+                "invalid image base64 data",
+                status_code=400,
+                error_type="invalid_request_error",
+                code="invalid_image_data",
+            ) from exc
+        if not image_bytes:
+            raise ImageGenerationError(
+                "image file is empty",
+                status_code=400,
+                error_type="invalid_request_error",
+                code="invalid_image_data",
+            )
+        files.append((image_bytes, f"image_{index}.png", "image/png"))
     return files
 
 
