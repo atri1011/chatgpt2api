@@ -20,6 +20,7 @@ import {
   collectUpstreamContributions,
   getOrderedUpstreamNodes,
 } from "@/lib/canvas-runner";
+import { normalizeBase64 } from "@/lib/base64";
 import { cn } from "@/lib/utils";
 
 type PreviewItem =
@@ -66,7 +67,7 @@ function buildPreviewItems(
 
   imageNodes.forEach((node) => {
     const src = node.data.b64_json
-      ? `data:image/png;base64,${node.data.b64_json}`
+      ? `data:image/png;base64,${normalizeBase64(node.data.b64_json)}`
       : node.data.url || "";
     items.push({
       kind: "image",

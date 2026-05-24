@@ -254,6 +254,42 @@ class NewAPIImageProviderTests(unittest.TestCase):
 
         self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
 
+    def test_generation_accepts_image_url_field(self):
+        def fake_post(url, **kwargs):
+            return FakeResponse(payload={"data": [{"image_url": {"url": "https://cdn.example.test/from-image-url.png"}}]})
+
+        def fake_get(url, **kwargs):
+            self.assertEqual(url, "https://cdn.example.test/from-image-url.png")
+            return FakeResponse(content=IMAGE_BYTES)
+
+        with (
+            mock.patch("services.newapi_image_provider.requests.post", side_effect=fake_post),
+            mock.patch("services.newapi_image_provider.requests.get", side_effect=fake_get),
+        ):
+            result = collect_image_outputs(stream_image_outputs_with_pool(ConversationRequest(
+                prompt="cat",
+                model="gpt-image-2",
+                n=1,
+                response_format="b64_json",
+            )))
+
+        self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
+
+    def test_generation_accepts_top_level_images_field(self):
+        def fake_post(url, **kwargs):
+            return FakeResponse(payload={"created": 321, "images": [{"base64": IMAGE_B64}]})
+
+        with mock.patch("services.newapi_image_provider.requests.post", side_effect=fake_post):
+            result = collect_image_outputs(stream_image_outputs_with_pool(ConversationRequest(
+                prompt="cat",
+                model="gpt-image-2",
+                n=1,
+                response_format="b64_json",
+            )))
+
+        self.assertEqual(result["created"], 321)
+        self.assertEqual(result["data"][0]["b64_json"], IMAGE_B64)
+
     def test_missing_env_returns_openai_style_error(self):
         os.environ.pop("CHATGPT2API_NEWAPI_API_KEY", None)
 

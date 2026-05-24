@@ -15,7 +15,7 @@ from services.protocol.conversation import (
     stream_text_deltas,
     text_backend,
 )
-from utils.helper import extract_image_from_message_content, extract_response_prompt, has_response_image_generation_tool
+from utils.helper import decode_base64_bytes, extract_image_from_message_content, extract_response_prompt, has_response_image_generation_tool
 
 
 def is_text_response_request(body: dict[str, Any]) -> bool:
@@ -34,7 +34,7 @@ def extract_response_image(input_value: object) -> tuple[bytes, str] | None:
             if image_url.startswith("data:"):
                 header, _, data = image_url.partition(",")
                 mime = header.split(";")[0].removeprefix("data:")
-                return base64.b64decode(data), mime or "image/png"
+                return decode_base64_bytes(data), mime or "image/png"
         if isinstance(item, dict):
             images = extract_image_from_message_content(item.get("content"))
             if images:

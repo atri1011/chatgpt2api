@@ -33,3 +33,4 @@ git_cache/
 .codex-tasks/
 .ccg/
 .ccg/tasks/enhance-canvas-config-panel/.turns.json
+.kilo/kilo.jsonc

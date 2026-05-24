@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Clock3, Download, LoaderCircle, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { decodeBase64Bytes, normalizeBase64 } from "@/lib/base64";
 import { cn } from "@/lib/utils";
 import type { ImageConversation, ImageTurnStatus, StoredImage, StoredReferenceImage } from "@/store/image-conversations";
 
@@ -28,7 +29,7 @@ type ImageResultsProps = {
 
 function getStoredImageSrc(image: StoredImage) {
   if (image.b64_json) {
-    return `data:image/png;base64,${image.b64_json}`;
+    return `data:image/png;base64,${normalizeBase64(image.b64_json)}`;
   }
   return image.url || "";
 }
@@ -36,9 +37,7 @@ function getStoredImageSrc(image: StoredImage) {
 async function downloadStoredImage(image: StoredImage, index: number) {
   let blob: Blob;
   if (image.b64_json) {
-    const binary = atob(image.b64_json);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const bytes = new Uint8Array(decodeBase64Bytes(image.b64_json));
     blob = new Blob([bytes], { type: "image/png" });
   } else if (image.url) {
     const res = await fetch(image.url);

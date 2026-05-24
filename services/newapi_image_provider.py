@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +12,7 @@ from curl_cffi import CurlMime, requests
 from services.config import config
 from services.proxy_service import proxy_settings
 from utils.helper import decode_base64_bytes, ensure_ok, iter_sse_payloads
+from utils.log import logger
 
 
 class NewAPIImageProviderConfigError(ValueError):
@@ -42,6 +44,25 @@ def _decode_data_url(value: str) -> bytes:
 
 
 class NewAPIImageProvider:
+    _BASE64_TEXT_RE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
+    _BASE64_KEYS = (
+        "b64_json",
+        "base64",
+        "b64",
+        "image_b64",
+        "image_base64",
+        "image_data",
+    )
+    _REFERENCE_KEYS = (
+        "url",
+        "image_url",
+        "image",
+        "result",
+        "output",
+        "content",
+        "data",
+    )
+
     def _build_image_multipart(self, images: list[tuple[bytes, str, str]]) -> CurlMime:
         parts = [
             {
@@ -181,6 +202,94 @@ class NewAPIImageProvider:
             payload = response.json()
         return self._normalize_response(payload, prompt)
 
+    def _normalize_base64_payload(self, value: object, *, strict: bool) -> str:
+        text = _clean(value)
+        if not text:
+            return ""
+        normalized = "".join(text.split())
+        if not normalized:
+            return ""
+        if not self._BASE64_TEXT_RE.fullmatch(normalized):
+            return ""
+        try:
+            data = decode_base64_bytes(normalized, validate=strict)
+        except Exception:
+            return ""
+        if not data:
+            return ""
+        if not strict and not self._looks_like_image_bytes(data):
+            return ""
+        return base64.b64encode(data).decode("ascii")
+
+    @staticmethod
+    def _looks_like_image_bytes(data: bytes) -> bool:
+        return data.startswith((
+            b"\x89PNG\r\n\x1a\n",
+            b"\xff\xd8\xff",
+            b"GIF87a",
+            b"GIF89a",
+            b"BM",
+        )) or (data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+
+    def _extract_image_b64(self, value: object, *, strict_base64: bool = False) -> str:
+        if isinstance(value, str):
+            text = _clean(value)
+            if not text:
+                return ""
+            if text.lower().startswith("data:image/"):
+                return base64.b64encode(_decode_data_url(text)).decode("ascii")
+            if text.lower().startswith(("http://", "https://")):
+                return self._download_image_b64(text)
+            return self._normalize_base64_payload(text, strict=strict_base64)
+        if isinstance(value, list):
+            for item in value:
+                b64_json = self._extract_image_b64(item, strict_base64=strict_base64)
+                if b64_json:
+                    return b64_json
+            return ""
+        if not isinstance(value, dict):
+            return ""
+        for key in self._BASE64_KEYS:
+            if key not in value:
+                continue
+            b64_json = self._extract_image_b64(value.get(key), strict_base64=True)
+            if b64_json:
+                return b64_json
+        for key in self._REFERENCE_KEYS:
+            if key not in value:
+                continue
+            b64_json = self._extract_image_b64(value.get(key), strict_base64=False)
+            if b64_json:
+                return b64_json
+        return ""
+
+    def _response_items(self, payload: dict[str, Any]) -> list[Any]:
+        for key in ("data", "images", "output", "result"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict):
+                return [value]
+        return []
+
+    def _payload_debug_summary(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {"payload_type": type(payload).__name__}
+        summary: dict[str, Any] = {"payload_keys": sorted(str(key) for key in payload.keys())[:20]}
+        items = self._response_items(payload)
+        summary["item_count"] = len(items)
+        if items:
+            first = items[0]
+            summary["first_item_type"] = type(first).__name__
+            if isinstance(first, dict):
+                summary["first_item_keys"] = sorted(str(key) for key in first.keys())[:20]
+            elif isinstance(first, str):
+                summary["first_item_preview"] = first[:120]
+        error = payload.get("error")
+        if error is not None:
+            summary["error"] = error
+        return summary
+
     def _last_stream_payload(self, response: requests.Response) -> Any | None:
         content_type = str(response.headers.get("content-type") or "").lower()
         if "text/event-stream" not in content_type:
@@ -209,30 +318,30 @@ class NewAPIImageProvider:
     def _normalize_response(self, payload: Any, prompt: str) -> NewAPIImageResult:
         if not isinstance(payload, dict):
             raise NewAPIImageProviderResponseError("NewAPI returned a non-object image response")
-        raw_data = payload.get("data")
-        if not isinstance(raw_data, list):
+        raw_data = self._response_items(payload)
+        if not raw_data:
+            logger.warning({
+                "event": "newapi_image_response_missing_data",
+                "summary": self._payload_debug_summary(payload),
+            })
             raise NewAPIImageProviderResponseError("NewAPI image response did not include data")
         items: list[dict[str, Any]] = []
         for raw_item in raw_data:
-            if not isinstance(raw_item, dict):
-                continue
-            b64_json = _clean(raw_item.get("b64_json"))
-            if b64_json:
-                try:
-                    b64_json = base64.b64encode(decode_base64_bytes(b64_json)).decode("ascii")
-                except Exception as exc:
-                    raise NewAPIImageProviderResponseError("NewAPI returned invalid base64 image data") from exc
-            if not b64_json:
-                image_url = _clean(raw_item.get("url"))
-                if image_url:
-                    b64_json = self._download_image_b64(image_url)
+            b64_json = self._extract_image_b64(raw_item)
             if not b64_json:
                 continue
+            revised_prompt = prompt
+            if isinstance(raw_item, dict):
+                revised_prompt = _clean(raw_item.get("revised_prompt")) or revised_prompt
             items.append({
                 "b64_json": b64_json,
-                "revised_prompt": _clean(raw_item.get("revised_prompt")) or prompt,
+                "revised_prompt": revised_prompt,
             })
         if not items:
+            logger.warning({
+                "event": "newapi_image_response_unusable",
+                "summary": self._payload_debug_summary(payload),
+            })
             raise NewAPIImageProviderResponseError("NewAPI image response did not include usable images")
         created = payload.get("created")
         try:

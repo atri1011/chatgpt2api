@@ -128,9 +128,11 @@ class ConfigLoadingTests(unittest.TestCase):
                 "CHATGPT2API_NEWAPI_TIMEOUT_SEC",
             ]
             old_values = {key: module.os.environ.get(key) for key in keys}
+            old_env_auth_key = module.os.environ.get("CHATGPT2API_AUTH_KEY")
             try:
                 for key in keys:
                     module.os.environ.pop(key, None)
+                module.os.environ.pop("CHATGPT2API_AUTH_KEY", None)
                 module.os.environ["CHATGPT2API_NEWAPI_TIMEOUT_SEC"] = "300"
 
                 module._load_dotenv_file(env_file)
@@ -146,6 +148,10 @@ class ConfigLoadingTests(unittest.TestCase):
                         module.os.environ.pop(key, None)
                     else:
                         module.os.environ[key] = value
+                if old_env_auth_key is None:
+                    module.os.environ.pop("CHATGPT2API_AUTH_KEY", None)
+                else:
+                    module.os.environ["CHATGPT2API_AUTH_KEY"] = old_env_auth_key
 
 
 if __name__ == "__main__":

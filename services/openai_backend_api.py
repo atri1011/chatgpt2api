@@ -15,7 +15,7 @@ from PIL import Image
 from services.account_service import account_service
 from services.config import config
 from services.proxy_service import proxy_settings
-from utils.helper import UpstreamHTTPError, ensure_ok, iter_sse_payloads, new_uuid
+from utils.helper import UpstreamHTTPError, decode_base64_bytes, ensure_ok, iter_sse_payloads, new_uuid
 from utils.log import logger
 from utils.pow import build_legacy_requirements_token, build_proof_token, parse_pow_resources
 from utils.turnstile import solve_turnstile_token
@@ -522,7 +522,7 @@ class OpenAIBackendAPI:
             if file_path.exists() and file_path.is_file():
                 return file_path.read_bytes()
         payload = image.split(",", 1)[1] if image.startswith("data:") and "," in image else image
-        return base64.b64decode(payload)
+        return decode_base64_bytes(payload)
 
     def _upload_image(self, image: str, file_name: str = "image.png") -> Dict[str, Any]:
         """上传一张 base64 图片，返回底层文件元数据。"""

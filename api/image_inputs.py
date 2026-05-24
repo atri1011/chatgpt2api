@@ -15,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from services.proxy_service import proxy_settings
+from utils.helper import decode_base64_bytes
 
 ImageInput = tuple[bytes, str, str]
 ImageSource = str | UploadFile | ImageInput
@@ -92,7 +93,7 @@ def _json_reference_value(value: object) -> object:
 
 def _decode_base64_image(value: object, filename: str, mime_type: str) -> ImageInput:
     try:
-        data = base64.b64decode(str(value).strip(), validate=True)
+        data = decode_base64_bytes(str(value).strip(), validate=True)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail={"error": "invalid base64 image data"}) from exc
     if not data:
@@ -208,7 +209,7 @@ def _decode_data_url(url: str) -> ImageInput:
     if not mime_type.startswith("image/"):
         raise HTTPException(status_code=400, detail={"error": "image_url must point to an image"})
     try:
-        data = base64.b64decode(payload, validate=True) if ";base64" in header else unquote_to_bytes(payload)
+        data = decode_base64_bytes(payload, validate=True) if ";base64" in header else unquote_to_bytes(payload)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail={"error": "invalid data image URL"}) from exc
     if not data:

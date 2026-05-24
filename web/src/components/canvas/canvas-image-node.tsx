@@ -7,6 +7,7 @@ import { Layers, Loader2, Play, RefreshCcw, X } from "lucide-react";
 import { useCanvasNodeContext } from "@/components/canvas/canvas-node-context";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { normalizeBase64 } from "@/lib/base64";
 import { cn } from "@/lib/utils";
 import type { CanvasImageNode as CanvasImageNodeType } from "@/types/canvas";
 
@@ -50,7 +51,7 @@ export function CanvasImageNode({ id, data, selected }: NodeProps<CanvasImageNod
   const ctx = useCanvasNodeContext();
   const status = data.status;
   const previewSrc = data.b64_json
-    ? `data:image/png;base64,${data.b64_json}`
+    ? `data:image/png;base64,${normalizeBase64(data.b64_json)}`
     : data.url || "";
   const [titleDraft, setTitleDraft] = useState(data.title ?? "");
   const [editingTitle, setEditingTitle] = useState(false);

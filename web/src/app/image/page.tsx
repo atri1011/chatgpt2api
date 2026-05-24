@@ -26,6 +26,7 @@ import {
   type Account,
   type ImageTask,
 } from "@/lib/api";
+import { decodeBase64Bytes, normalizeBase64 } from "@/lib/base64";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import {
   clearImageConversations,
@@ -97,11 +98,7 @@ function readFileAsDataUrl(file: File) {
 function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string) {
   const [header, content] = dataUrl.split(",", 2);
   const matchedMimeType = header.match(/data:(.*?);base64/)?.[1];
-  const binary = atob(content || "");
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
+  const bytes = new Uint8Array(decodeBase64Bytes(content || ""));
   return new File([bytes], fileName, { type: mimeType || matchedMimeType || "image/png" });
 }
 
@@ -113,7 +110,7 @@ function buildReferenceImageFromResult(image: StoredImage, fileName: string): St
   return {
     name: fileName,
     type: "image/png",
-    dataUrl: `data:image/png;base64,${image.b64_json}`,
+    dataUrl: `data:image/png;base64,${normalizeBase64(image.b64_json)}`,
   };
 }
 

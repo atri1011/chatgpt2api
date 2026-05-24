@@ -17,6 +17,7 @@ import {
   type CanvasImageNode,
   type CanvasImageNodeData,
 } from "@/types/canvas";
+import { decodeBase64Bytes } from "@/lib/base64";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 90; // ~3 minutes
@@ -32,11 +33,7 @@ function createClientTaskId() {
 function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string): File {
   const [header, content] = dataUrl.split(",", 2);
   const matchedMimeType = header.match(/data:(.*?);base64/)?.[1];
-  const binary = atob(content || "");
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
+  const bytes = new Uint8Array(decodeBase64Bytes(content || ""));
   return new File([bytes], fileName, { type: mimeType || matchedMimeType || "image/png" });
 }
 
