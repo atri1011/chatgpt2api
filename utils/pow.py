@@ -175,7 +175,9 @@ def _pow_generate(seed: str, difficulty: str, config: list[Any], limit: int = 50
         digest = hashlib.sha3_512(seed_bytes + encoded).digest()
         if digest[:diff_len] <= target:
             return encoded.decode(), True
-    fallback = "wQ8Lk5FbGpA2NcR9dShT6gYjU7VxZ4D" + pybase64.b64encode(f'"{seed}"'.encode()).decode()
+    # 兜底：返回看似正常但解算未完成的载荷，由上游决定是否抛错；
+    # 避免使用固定魔法串导致服务端单字段指纹聚类
+    fallback = pybase64.b64encode(json.dumps(config, separators=(",", ":")).encode()).decode()
     return fallback, False
 
 
