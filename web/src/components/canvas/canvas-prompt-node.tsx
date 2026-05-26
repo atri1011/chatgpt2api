@@ -22,7 +22,7 @@ export function CanvasPromptNode({ id, data, selected }: NodeProps<CanvasPromptN
   return (
     <div
       className={cn(
-        "group relative flex w-[320px] flex-col rounded-3xl border border-l-4 border-l-amber-500/80 bg-white/95 shadow-[0_12px_40px_-20px_rgba(28,25,23,0.15)] backdrop-blur-md transition-all duration-200",
+        "group relative flex w-[320px] flex-col rounded-lg border border-l-4 border-l-amber-500/80 bg-white/95 shadow-[0_12px_28px_-22px_rgba(28,25,23,0.24)] backdrop-blur-md transition-all duration-200",
         selected
           ? "border-indigo-500 ring-2 ring-indigo-500/10 shadow-[0_12px_40px_-15px_rgba(99,102,241,0.25)]"
           : "border-stone-200/85",

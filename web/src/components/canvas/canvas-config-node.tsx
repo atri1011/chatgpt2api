@@ -97,7 +97,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
   return (
     <div
       className={cn(
-        "relative flex w-[320px] flex-col rounded-3xl border border-l-4 border-l-indigo-500 bg-white/95 shadow-[0_12px_40px_-20px_rgba(28,25,23,0.15)] backdrop-blur-md transition-all duration-200",
+        "relative flex w-[320px] flex-col rounded-lg border border-l-4 border-l-indigo-500 bg-white/95 shadow-[0_12px_28px_-22px_rgba(28,25,23,0.24)] backdrop-blur-md transition-all duration-200",
         selected
           ? "border-indigo-500 ring-2 ring-indigo-500/10 shadow-[0_12px_40px_-15px_rgba(99,102,241,0.25)]"
           : "border-stone-200/85",
@@ -250,7 +250,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             }
             placeholder="本节点提示词（与上游文本节点拼合后作为最终提示词）..."
             rows={3}
-            className="resize-none rounded-2xl border-stone-200 bg-stone-50 px-3 py-2 text-[12px] leading-relaxed text-stone-800 placeholder:text-stone-400 transition-all focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
+            className="resize-none rounded-md border-stone-200 bg-stone-50 px-3 py-2 text-[12px] leading-relaxed text-stone-800 placeholder:text-stone-400 transition-all focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
           />
         ) : null}
 
@@ -261,10 +261,10 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
               ctx.onChangeConfigData(id, { model: value as typeof currentModel })
             }
           >
-            <SelectTrigger className="h-9 rounded-2xl border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
+            <SelectTrigger className="h-9 rounded-md border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
               <SelectValue placeholder="模型" />
             </SelectTrigger>
-            <SelectContent className="rounded-2xl border-stone-200 bg-white">
+            <SelectContent className="rounded-md border-stone-200 bg-white">
               {IMAGE_MODEL_OPTIONS.map((option) => (
                 <SelectItem
                   key={option.value}
@@ -281,10 +281,10 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             value={currentSize}
             onValueChange={(value) => ctx.onChangeConfigData(id, { size: value })}
           >
-            <SelectTrigger className="h-9 rounded-2xl border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
+            <SelectTrigger className="h-9 rounded-md border-stone-200 bg-stone-50 px-3 text-[12px] text-stone-700 shadow-none transition-colors hover:bg-stone-100/50 focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20">
               <SelectValue placeholder="比例" />
             </SelectTrigger>
-            <SelectContent className="rounded-2xl border-stone-200 bg-white">
+            <SelectContent className="rounded-md border-stone-200 bg-white">
               {sizeOptions.map((option) => (
                 <SelectItem
                   key={option.value}
@@ -297,7 +297,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             </SelectContent>
           </Select>
 
-          <div className="flex h-9 items-center justify-between gap-1 rounded-2xl border border-stone-200 bg-stone-50 px-1.5 text-[12px] font-semibold text-stone-700">
+          <div className="flex h-9 items-center justify-between gap-1 rounded-md border border-stone-200 bg-stone-50 px-1.5 text-[12px] font-semibold text-stone-700">
             <button
               type="button"
               aria-label="减少数量"
@@ -339,7 +339,7 @@ export function CanvasConfigNode({ id, data, selected }: CanvasConfigNodeProps) 
             ctx.onRunConfig(id);
           }}
           disabled={isRunning}
-          className="h-10 w-full rounded-2xl bg-indigo-600 text-[13px] font-semibold text-white shadow-sm shadow-indigo-500/10 transition-all duration-150 hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-500/15 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-10 w-full rounded-md bg-indigo-600 text-[13px] font-semibold text-white shadow-sm shadow-indigo-500/10 transition-all duration-150 hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-500/15 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRunning ? (
             <Loader2 className="size-3.5 animate-spin" />

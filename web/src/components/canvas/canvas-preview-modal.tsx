@@ -165,7 +165,7 @@ export function CanvasPreviewModal({
               参考图（{imageItems.length}）
             </h3>
             {imageItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-stone-200 px-4 py-6 text-center text-xs text-stone-400">
+              <div className="rounded-lg border border-dashed border-stone-200 px-4 py-6 text-center text-xs text-stone-400">
                 上游暂无成功生成的图片
               </div>
             ) : (
@@ -173,9 +173,9 @@ export function CanvasPreviewModal({
                 {imageItems.map((item) => (
                   <li
                     key={item.nodeId}
-                    className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-2"
+                    className="flex items-center gap-3 rounded-lg border border-stone-200 bg-white p-2"
                   >
-                    <div className="size-12 shrink-0 overflow-hidden rounded-xl bg-stone-100">
+                    <div className="size-12 shrink-0 overflow-hidden rounded-md bg-stone-100">
                       {item.src ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={item.src} alt={item.title} className="size-full object-cover" />
@@ -236,7 +236,7 @@ export function CanvasPreviewModal({
               文本提示词（{textItems.length}）
             </h3>
             {textItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-stone-200 px-4 py-6 text-center text-xs text-stone-400">
+              <div className="rounded-lg border border-dashed border-stone-200 px-4 py-6 text-center text-xs text-stone-400">
                 上游暂无文本提示词
               </div>
             ) : (
@@ -244,7 +244,7 @@ export function CanvasPreviewModal({
                 {textItems.map((item) => (
                   <li
                     key={item.nodeId}
-                    className="rounded-2xl border border-stone-200 bg-white p-3"
+                    className="rounded-lg border border-stone-200 bg-white p-3"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="truncate text-xs font-medium text-stone-500">

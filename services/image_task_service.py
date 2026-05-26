@@ -43,6 +43,18 @@ def _clean(value: object, default: str = "") -> str:
     return str(value or default).strip()
 
 
+def _human_image_error(message: str) -> str:
+    normalized = message.strip()
+    lower = normalized.lower()
+    if "no available image quota" in lower:
+        return "号池中没有可用生图账号或账号额度已耗尽，请先在账号管理中添加/刷新可用账号。"
+    if "newapi image request failed" in lower and "status=524" in lower:
+        return "NewAPI 生图上游超时（524），请检查 NewAPI 服务状态、网络连通性或更换可用上游。"
+    if "expecting value: line 1 column 1" in lower:
+        return "生图上游返回了空响应或非 JSON 内容，请检查上游服务状态和代理连接。"
+    return normalized or "image task failed"
+
+
 def _owner_id(identity: dict[str, object]) -> str:
     return _clean(identity.get("id")) or "anonymous"
 
@@ -247,7 +259,7 @@ class ImageTaskService:
                 urls=_collect_image_urls(data),
             )
         except Exception as exc:
-            error_message = str(exc) or "image task failed"
+            error_message = _human_image_error(str(exc))
             self._update_task(key, status=TASK_STATUS_ERROR, error=error_message, data=[])
             self._log_call(
                 identity,

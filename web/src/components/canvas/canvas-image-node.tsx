@@ -64,7 +64,7 @@ export function CanvasImageNode({ id, data, selected }: NodeProps<CanvasImageNod
   return (
     <div
       className={cn(
-        "relative flex w-[300px] flex-col rounded-3xl border bg-white/95 shadow-[0_12px_40px_-20px_rgba(28,25,23,0.15)] backdrop-blur-md transition-all duration-200",
+        "relative flex w-[300px] flex-col rounded-lg border bg-white/95 shadow-[0_12px_28px_-22px_rgba(28,25,23,0.24)] backdrop-blur-md transition-all duration-200",
         selected
           ? "border-indigo-500 ring-2 ring-indigo-500/10 shadow-[0_12px_40px_-15px_rgba(99,102,241,0.25)]"
           : "border-stone-200/85",
@@ -89,7 +89,7 @@ export function CanvasImageNode({ id, data, selected }: NodeProps<CanvasImageNod
         className="!z-10 !h-2.5 !w-2.5 !rounded-full !border-2 !border-stone-300 !bg-white transition-all duration-150 hover:!scale-110 hover:!border-indigo-500"
       />
 
-      <div className="flex flex-1 flex-col overflow-hidden rounded-[inherit]">
+      <div className="flex flex-1 flex-col overflow-hidden rounded-lg">
         <header className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-2">
           {editingTitle ? (
             <input
@@ -190,7 +190,7 @@ export function CanvasImageNode({ id, data, selected }: NodeProps<CanvasImageNod
               onChange={(event) => ctx.onChangeImagePrompt(id, event.target.value)}
               placeholder="输入提示词..."
               rows={3}
-              className="h-20 resize-none rounded-2xl border-stone-200 bg-stone-50 px-3 py-2 text-[12px] leading-relaxed text-stone-800 shadow-none transition-colors focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
+              className="h-20 resize-none rounded-md border-stone-200 bg-stone-50 px-3 py-2 text-[12px] leading-relaxed text-stone-800 shadow-none transition-colors focus-visible:border-indigo-400 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
             />
 
             <div className="flex items-center justify-between gap-2">

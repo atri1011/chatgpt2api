@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import unittest
 from unittest import mock
 
@@ -61,6 +62,10 @@ class FakeImageTaskService:
 
 class ImageTasksApiTests(unittest.TestCase):
     def setUp(self):
+        old_auth_key = os.environ.get("CHATGPT2API_AUTH_KEY")
+        os.environ["CHATGPT2API_AUTH_KEY"] = "chatgpt2api"
+        self.addCleanup(self._restore_auth_key, old_auth_key)
+
         self.fake_service = FakeImageTaskService()
         self.service_patcher = mock.patch.object(image_tasks_module, "image_task_service", self.fake_service)
         self.service_patcher.start()
@@ -68,6 +73,13 @@ class ImageTasksApiTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(image_tasks_module.create_router())
         self.client = TestClient(app)
+
+    @staticmethod
+    def _restore_auth_key(old_auth_key: str | None):
+        if old_auth_key is None:
+            os.environ.pop("CHATGPT2API_AUTH_KEY", None)
+        else:
+            os.environ["CHATGPT2API_AUTH_KEY"] = old_auth_key
 
     def test_create_generation_task(self):
         response = self.client.post(

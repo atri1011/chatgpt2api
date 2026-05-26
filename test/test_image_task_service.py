@@ -107,6 +107,25 @@ class ImageTaskServiceTests(unittest.TestCase):
             self.assertEqual(result["items"][0]["status"], "success")
             self.assertEqual(result["items"][0]["data"][0]["url"], "http://example.test/image.png")
 
+    def test_image_quota_error_is_human_readable(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            def handler(_payload):
+                raise RuntimeError("no available image quota")
+
+            service = self.make_service(Path(tmp_dir) / "image_tasks.json", handler)
+            service.submit_generation(
+                OWNER,
+                client_task_id="quota-task",
+                prompt="cat",
+                model="gpt-image-2",
+                size=None,
+                base_url="http://local.test",
+            )
+            task = wait_for_task(service, OWNER, "quota-task", "error")
+
+            self.assertIn("号池中没有可用生图账号", task["error"])
+            self.assertNotIn("no available image quota", task["error"])
+
     def test_startup_marks_unfinished_tasks_as_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "image_tasks.json"

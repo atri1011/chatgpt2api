@@ -30,6 +30,21 @@ function createClientTaskId() {
   return `canvas-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+function humanizeImageTaskError(message?: string): string {
+  const raw = (message || "").trim();
+  const lower = raw.toLowerCase();
+  if (lower.includes("no available image quota")) {
+    return "号池中没有可用生图账号或账号额度已耗尽，请先在账号管理中添加/刷新可用账号。";
+  }
+  if (lower.includes("newapi image request failed") && lower.includes("status=524")) {
+    return "NewAPI 生图上游超时（524），请检查 NewAPI 服务状态、网络连通性或更换可用上游。";
+  }
+  if (lower.includes("expecting value: line 1 column 1")) {
+    return "生图上游返回了空响应或非 JSON 内容，请检查上游服务状态和代理连接。";
+  }
+  return raw || "生成失败";
+}
+
 function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string): File {
   const [header, content] = dataUrl.split(",", 2);
   const matchedMimeType = header.match(/data:(.*?);base64/)?.[1];
@@ -311,7 +326,7 @@ export async function runNode({ node, references, onUpdate }: RunNodeContext): P
     applyTaskUpdate(submitted, onUpdate);
     await pollUntilTerminal(clientTaskId, onUpdate);
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : "生成失败";
+    const message = humanizeImageTaskError(cause instanceof Error ? cause.message : undefined);
     onUpdate((data) => ({ ...data, status: "error", error: message }));
   }
 }
@@ -338,9 +353,9 @@ export type ConfigRunContext = {
 /**
  * Run a Config node end-to-end:
  * 1. Resolve transitive upstream → reference files + combined prompt
- * 2. Submit N independent (count=1) tasks concurrently
- * 3. Patch each child node with its terminal state
- * 4. Mirror first success to the batch root + mark Config status
+ * 2. Submit one task per result node concurrently
+ * 3. Patch each result node with its terminal state
+ * 4. Mirror first success to the root result + mark Config status
  */
 export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
   const { configNode, rootId: _rootId, childIds, nodes, edges } = ctx;
@@ -455,7 +470,7 @@ export async function runConfigNode(ctx: ConfigRunContext): Promise<void> {
           }
         }
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "生成失败";
+        const message = humanizeImageTaskError(cause instanceof Error ? cause.message : undefined);
         failures.push(message);
         ctx.onUpdateChild(childId, (data) => ({
           ...data,
@@ -529,7 +544,7 @@ function applyTaskUpdate(
       ...data,
       status: "error",
       taskId: task.id,
-      error: task.error || "生成失败",
+      error: humanizeImageTaskError(task.error),
     }));
     return;
   }
