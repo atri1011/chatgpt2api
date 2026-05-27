@@ -32,11 +32,18 @@ config = {
     "proxy": "",
     "total": 10,
     "threads": 3,
+    # Cold-time：注册成功后随机延迟再首次调 API，规避 OpenAI 的"注册即用"批次聚类
+    # 关闭(enabled=False)等价于旧行为：注册完立即 refresh
+    "cold_time": {
+        "enabled": True,
+        "min_seconds": 1800,    # 30 min
+        "max_seconds": 14400,   # 4 hours
+    },
 }
 register_config_file = base_dir.parents[1] / "data" / "register.json"
 try:
     saved_config = json.loads(register_config_file.read_text(encoding="utf-8"))
-    config.update({key: saved_config[key] for key in ("mail", "proxy", "total", "threads") if key in saved_config})
+    config.update({key: saved_config[key] for key in ("mail", "proxy", "total", "threads", "cold_time") if key in saved_config})
 except Exception:
     pass
 
@@ -51,63 +58,318 @@ platform_auth0_client = "eyJuYW1lIjoiYXV0aDAtc3BhLWpzIiwidmVyc2lvbiI6IjEuMjEuMCJ
 SENTINEL_SDK_URL = "https://sentinel.openai.com/sentinel/20260124ceb8/sdk.js"
 
 # 浏览器指纹池：UA / sec-ch-ua / impersonate(TLS JA3) / 时区 / 屏幕一体化
-# 每次注册随机抽一份，并在 PlatformRegistrar 实例内全程复用，保证一致性
+# 每次注册随机抽一份，并在 PlatformRegistrar 实例内全程复用，保证一致性。
+# 仅含桌面 Chromium 家族（Chrome / Edge / ChromeOS），因为 build_common_headers
+# 硬编码 sec-ch-ua-mobile=?0；不要在此加入 Safari/iOS/Android 条目，会触发
+# 头部互相矛盾的弱信号。
 BROWSER_FINGERPRINTS: list[dict] = [
-    {
-        "impersonate": "chrome131",
-        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
-        "platform": '"Windows"', "platform_version": '"15.0.0"',
-        "arch": '"x86"', "bitness": '"64"',
-        "tz_name": "China Standard Time", "tz_offset_minutes": 480,
-        "hardware_concurrency": 8, "screen": "1920x1080",
-        "accept_language": "zh-CN,zh;q=0.9,en;q=0.8",
-    },
-    {
-        "impersonate": "chrome136",
-        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-        "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
-        "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
-        "platform": '"Windows"', "platform_version": '"19.0.0"',
-        "arch": '"x86"', "bitness": '"64"',
-        "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
-        "hardware_concurrency": 16, "screen": "2560x1440",
-        "accept_language": "en-US,en;q=0.9",
-    },
-    {
-        "impersonate": "chrome145",
-        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-        "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
-        "sec_ch_ua_full": '"Chromium";v="145.0.7370.66", "Not:A-Brand";v="99.0.0.0", "Google Chrome";v="145.0.7370.66"',
-        "platform": '"macOS"', "platform_version": '"14.5.0"',
-        "arch": '"arm"', "bitness": '"64"',
-        "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
-        "hardware_concurrency": 12, "screen": "1728x1117",
-        "accept_language": "en-US,en;q=0.9",
-    },
-    {
-        "impersonate": "chrome142",
-        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
-        "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
-        "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
-        "platform": '"Windows"', "platform_version": '"15.0.0"',
-        "arch": '"x86"', "bitness": '"64"',
-        "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
-        "hardware_concurrency": 16, "screen": "1920x1200",
-        "accept_language": "en-GB,en;q=0.9",
-    },
-    {
-        "impersonate": "chrome146",
-        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-        "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
-        "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
-        "platform": '"Windows"', "platform_version": '"19.0.0"',
-        "arch": '"x86"', "bitness": '"64"',
-        "tz_name": "Japan Standard Time", "tz_offset_minutes": 540,
-        "hardware_concurrency": 8, "screen": "1920x1080",
-        "accept_language": "en-US,en;q=0.9",
-    },
+    # ===== Windows 11 / Chrome — 主流多版本 =====
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "China Standard Time", "tz_offset_minutes": 480,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "zh-CN,zh;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
+     "hardware_concurrency": 16, "screen": "2560x1440", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 16, "screen": "1920x1200", "accept_language": "en-GB,en;q=0.9"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Japan Standard Time", "tz_offset_minutes": 540,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome124", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+     "sec_ch_ua_full": '"Google Chrome";v="124.0.6367.207", "Chromium";v="124.0.6367.207", "Not-A.Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "GMT Standard Time", "tz_offset_minutes": 0,
+     "hardware_concurrency": 12, "screen": "1536x864", "accept_language": "en-GB,en;q=0.9"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.265", "Chromium";v="131.0.6778.265", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
+     "hardware_concurrency": 12, "screen": "1680x1050", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.92", "Chromium";v="142.0.7341.92"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Romance Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 8, "screen": "1366x768", "accept_language": "fr-FR,fr;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Chromium";v="145.0.7370.66", "Not:A-Brand";v="99.0.0.0", "Google Chrome";v="145.0.7370.66"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "W. Europe Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 24, "screen": "2560x1440", "accept_language": "de-DE,de;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central Standard Time", "tz_offset_minutes": -360,
+     "hardware_concurrency": 12, "screen": "1920x1080", "accept_language": "en-US,en;q=0.9,es;q=0.8"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "AUS Eastern Standard Time", "tz_offset_minutes": 600,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "en-AU,en;q=0.9"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Korea Standard Time", "tz_offset_minutes": 540,
+     "hardware_concurrency": 16, "screen": "2560x1600", "accept_language": "ko-KR,ko;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Google Chrome";v="145.0.7370.66", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "India Standard Time", "tz_offset_minutes": 330,
+     "hardware_concurrency": 6, "screen": "1366x768", "accept_language": "en-IN,en;q=0.9,hi;q=0.8"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "E. South America Standard Time", "tz_offset_minutes": -180,
+     "hardware_concurrency": 8, "screen": "1600x900", "accept_language": "pt-BR,pt;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome124", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+     "sec_ch_ua_full": '"Google Chrome";v="124.0.6367.119", "Chromium";v="124.0.6367.119", "Not-A.Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Russian Standard Time", "tz_offset_minutes": 180,
+     "hardware_concurrency": 12, "screen": "1920x1080", "accept_language": "ru-RU,ru;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.49", "Google Chrome";v="136.0.7103.49", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Singapore Standard Time", "tz_offset_minutes": 480,
+     "hardware_concurrency": 10, "screen": "1920x1080", "accept_language": "en-SG,en;q=0.9,zh;q=0.8"},
+
+    # ===== macOS / Chrome — Intel + Apple Silicon =====
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Chromium";v="145.0.7370.66", "Not:A-Brand";v="99.0.0.0", "Google Chrome";v="145.0.7370.66"',
+     "platform": '"macOS"', "platform_version": '"14.5.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
+     "hardware_concurrency": 12, "screen": "1728x1117", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"macOS"', "platform_version": '"15.1.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
+     "hardware_concurrency": 10, "screen": "1440x900", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"13.6.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 8, "screen": "1680x1050", "accept_language": "de-DE,de;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"macOS"', "platform_version": '"15.2.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "GMT Standard Time", "tz_offset_minutes": 0,
+     "hardware_concurrency": 8, "screen": "1512x982", "accept_language": "en-GB,en;q=0.9"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"14.7.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Tokyo Standard Time", "tz_offset_minutes": 540,
+     "hardware_concurrency": 10, "screen": "1728x1117", "accept_language": "ja-JP,ja;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome124", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+     "sec_ch_ua_full": '"Google Chrome";v="124.0.6367.207", "Chromium";v="124.0.6367.207", "Not-A.Brand";v="99.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"13.5.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Mountain Standard Time", "tz_offset_minutes": -420,
+     "hardware_concurrency": 8, "screen": "1440x900", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Google Chrome";v="145.0.7370.66", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"15.1.1"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Hong Kong Standard Time", "tz_offset_minutes": 480,
+     "hardware_concurrency": 12, "screen": "1920x1200", "accept_language": "zh-HK,zh;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"macOS"', "platform_version": '"14.6.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Romance Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 8, "screen": "1512x982", "accept_language": "fr-FR,fr;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"15.0.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
+     "hardware_concurrency": 14, "screen": "2056x1329", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"macOS"', "platform_version": '"14.7.1"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
+     "hardware_concurrency": 8, "screen": "1512x982", "accept_language": "en-CA,en;q=0.9,fr;q=0.8"},
+
+    # ===== Linux / Chrome =====
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Linux"', "platform_version": '"6.8.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "GMT Standard Time", "tz_offset_minutes": 0,
+     "hardware_concurrency": 12, "screen": "1920x1080", "accept_language": "en-GB,en;q=0.9"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"Linux"', "platform_version": '"6.10.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 16, "screen": "2560x1440", "accept_language": "de-DE,de;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Linux"', "platform_version": '"6.5.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Google Chrome";v="145.0.7370.66", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"Linux"', "platform_version": '"6.12.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "AUS Eastern Standard Time", "tz_offset_minutes": 600,
+     "hardware_concurrency": 8, "screen": "1680x1050", "accept_language": "en-AU,en;q=0.9"},
+
+    # ===== ChromeOS =====
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (X11; CrOS x86_64 15823.74.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Chrome OS"', "platform_version": '"15823.74.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
+     "hardware_concurrency": 4, "screen": "1366x768", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (X11; CrOS aarch64 15823.74.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Chrome OS"', "platform_version": '"15823.74.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Central Standard Time", "tz_offset_minutes": -360,
+     "hardware_concurrency": 6, "screen": "1920x1080", "accept_language": "en-US,en;q=0.9"},
+
+    # ===== Edge on Windows =====
+    {"impersonate": "edge101", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.86",
+     "sec_ch_ua": '"Microsoft Edge";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Microsoft Edge";v="131.0.2903.86", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Pacific Standard Time", "tz_offset_minutes": -480,
+     "hardware_concurrency": 12, "screen": "1920x1080", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "edge101", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.3240.50",
+     "sec_ch_ua": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Microsoft Edge";v="136.0.3240.50", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "GMT Standard Time", "tz_offset_minutes": 0,
+     "hardware_concurrency": 8, "screen": "1536x864", "accept_language": "en-GB,en;q=0.9"},
+    {"impersonate": "edge101", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.3343.62",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Microsoft Edge";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Microsoft Edge";v="142.0.3343.62", "Chromium";v="142.0.7341.10"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 16, "screen": "2560x1440", "accept_language": "de-DE,de;q=0.9,en;q=0.8"},
+    {"impersonate": "edge101", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.3429.46",
+     "sec_ch_ua": '"Microsoft Edge";v="145", "Chromium";v="145", "Not?A_Brand";v="8"',
+     "sec_ch_ua_full": '"Microsoft Edge";v="145.0.3429.46", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "China Standard Time", "tz_offset_minutes": 480,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "zh-CN,zh;q=0.9,en;q=0.8"},
+
+    # ===== Edge on macOS =====
+    {"impersonate": "edge101", "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.3343.62",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Microsoft Edge";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Microsoft Edge";v="142.0.3343.62", "Chromium";v="142.0.7341.10"',
+     "platform": '"macOS"', "platform_version": '"14.6.0"', "arch": '"arm"', "bitness": '"64"',
+     "tz_name": "Eastern Standard Time", "tz_offset_minutes": -300,
+     "hardware_concurrency": 10, "screen": "1728x1117", "accept_language": "en-US,en;q=0.9"},
+
+    # ===== 更多 Windows / Chrome 变体（凑足 50） =====
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.265", "Chromium";v="131.0.6778.265", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Taipei Standard Time", "tz_offset_minutes": 480,
+     "hardware_concurrency": 6, "screen": "1366x768", "accept_language": "zh-TW,zh;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.49", "Google Chrome";v="136.0.7103.49", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Central European Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 4, "screen": "1366x768", "accept_language": "pl-PL,pl;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.92", "Chromium";v="142.0.7341.92"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "W. Europe Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 12, "screen": "1920x1200", "accept_language": "nl-NL,nl;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Google Chrome";v="145.0.7370.66", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Romance Standard Time", "tz_offset_minutes": 60,
+     "hardware_concurrency": 8, "screen": "1600x900", "accept_language": "it-IT,it;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Mountain Standard Time", "tz_offset_minutes": -420,
+     "hardware_concurrency": 6, "screen": "1366x768", "accept_language": "en-US,en;q=0.9"},
+    {"impersonate": "chrome124", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+     "sec_ch_ua_full": '"Google Chrome";v="124.0.6367.119", "Chromium";v="124.0.6367.119", "Not-A.Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Pacific SA Standard Time", "tz_offset_minutes": -180,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "es-MX,es;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Cen. Australia Standard Time", "tz_offset_minutes": 570,
+     "hardware_concurrency": 10, "screen": "1920x1080", "accept_language": "en-AU,en;q=0.9"},
+    {"impersonate": "chrome136", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+     "sec_ch_ua_full": '"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Iran Standard Time", "tz_offset_minutes": 210,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "fa-IR,fa;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Israel Standard Time", "tz_offset_minutes": 120,
+     "hardware_concurrency": 12, "screen": "2560x1440", "accept_language": "he-IL,he;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome145", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="145", "Not?A_Brand";v="8", "Chromium";v="145"',
+     "sec_ch_ua_full": '"Google Chrome";v="145.0.7370.66", "Chromium";v="145.0.7370.66", "Not:A-Brand";v="8.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Arabian Standard Time", "tz_offset_minutes": 240,
+     "hardware_concurrency": 8, "screen": "1920x1080", "accept_language": "ar-AE,ar;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome146", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Chromium";v="146", "Not:A-Brand";v="8", "Google Chrome";v="146"',
+     "sec_ch_ua_full": '"Chromium";v="146.0.7390.54", "Not:A-Brand";v="8.0.0.0", "Google Chrome";v="146.0.7390.54"',
+     "platform": '"Windows"', "platform_version": '"15.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "SE Asia Standard Time", "tz_offset_minutes": 420,
+     "hardware_concurrency": 6, "screen": "1366x768", "accept_language": "th-TH,th;q=0.9,en;q=0.8"},
+    {"impersonate": "chrome131", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+     "sec_ch_ua_full": '"Google Chrome";v="131.0.6778.140", "Chromium";v="131.0.6778.140", "Not_A Brand";v="24.0.0.0"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Atlantic Standard Time", "tz_offset_minutes": -240,
+     "hardware_concurrency": 8, "screen": "1440x900", "accept_language": "en-CA,en;q=0.9,fr;q=0.8"},
+    {"impersonate": "chrome142", "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+     "sec_ch_ua": '"Not(A:Brand";v="99", "Google Chrome";v="142", "Chromium";v="142"',
+     "sec_ch_ua_full": '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="142.0.7341.10", "Chromium";v="142.0.7341.10"',
+     "platform": '"Windows"', "platform_version": '"19.0.0"', "arch": '"x86"', "bitness": '"64"',
+     "tz_name": "Argentina Standard Time", "tz_offset_minutes": -180,
+     "hardware_concurrency": 6, "screen": "1600x900", "accept_language": "es-AR,es;q=0.9,en;q=0.8"},
 ]
 
 # 姓名 / 出生年份扩池，降低跨账号聚类信号
@@ -855,6 +1117,27 @@ class PlatformRegistrar:
         }
 
 
+def _schedule_cold_refresh(email: str, access_token: str, min_seconds: float, max_seconds: float) -> None:
+    """注册成功后后台守护线程：随机延迟内不触碰 API，到点再首次 refresh。
+    打散"注册 + 立即调 API"的批次时间签名，规避 OpenAI 的同批聚类封禁。
+    """
+    lo, hi = float(min_seconds), float(max_seconds)
+    if hi < lo:
+        lo, hi = hi, lo
+    delay = random.uniform(lo, hi) if hi > lo else lo
+
+    def _runner() -> None:
+        try:
+            time.sleep(delay)
+            account_service.refresh_accounts([access_token])
+            log(f"{email} 冷启动 refresh 完成（延迟 {delay/60:.1f} 分钟）", "green")
+        except Exception as e:
+            log(f"{email} 冷启动 refresh 失败：{e}", "yellow")
+
+    threading.Thread(target=_runner, name=f"cold-refresh-{email}", daemon=True).start()
+    log(f"{email} 已入库，将在 {delay/60:.1f} 分钟后冷启动刷新（规避批次聚类）", "yellow")
+
+
 def worker(index: int) -> dict:
     start = time.time()
     registrar = PlatformRegistrar(config["proxy"])
@@ -863,8 +1146,23 @@ def worker(index: int) -> dict:
         result = registrar.register(index)
         cost = time.time() - start
         access_token = str(result["access_token"])
+        cold_cfg = config.get("cold_time") or {}
+        cold_enabled = bool(cold_cfg.get("enabled", True))
+        if cold_enabled:
+            # 在入库前打 cold_until 标记，供 UI / 后续筛选使用
+            min_s = float(cold_cfg.get("min_seconds", 1800))
+            max_s = float(cold_cfg.get("max_seconds", 14400))
+            cold_until_ts = time.time() + random.uniform(min(min_s, max_s), max(min_s, max_s))
+            result["cold_until"] = datetime.fromtimestamp(cold_until_ts, tz=timezone.utc).isoformat()
         account_service.add_account_items([result])
-        account_service.refresh_accounts([access_token])
+        if cold_enabled:
+            _schedule_cold_refresh(
+                result["email"], access_token,
+                float(cold_cfg.get("min_seconds", 1800)),
+                float(cold_cfg.get("max_seconds", 14400)),
+            )
+        else:
+            account_service.refresh_accounts([access_token])
         with stats_lock:
             stats["done"] += 1
             stats["success"] += 1
